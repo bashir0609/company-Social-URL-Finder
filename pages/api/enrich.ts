@@ -197,7 +197,10 @@ export default async function handler(
     });
   }
 
-  const { company, method = 'extraction' } = req.body;
+  const { company, method = 'extraction', apiKey } = req.body;
+
+  // Use API key from request body or environment variable
+  const effectiveApiKey = apiKey || process.env.OPENROUTER_API_KEY;
 
   if (!company) {
     return res.status(400).json({
