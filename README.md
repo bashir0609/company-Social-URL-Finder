@@ -2,7 +2,7 @@
 
 A modern Next.js application that finds official social media profiles and contact pages for any company. Built with React, TypeScript, and Tailwind CSS - **optimized for Vercel deployment**.
 
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/YOUR_USERNAME/company-social-finder)
+[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/bashir0609/company-social-finder)
 
 ---
 
@@ -161,13 +161,25 @@ nextjs-version/
 
 ---
 
-## 🔐 Environment Variables
+## 🔐 API Key Configuration
+
+### User-Provided API Key (Recommended)
+
+Users can enter their OpenRouter API key directly in the app interface:
+- ✅ No server configuration needed
+- ✅ Each user uses their own key
+- ✅ More secure (keys not stored on server)
+- ✅ Works immediately after deployment
+
+### Environment Variable (Optional)
+
+Alternatively, set a default API key in Vercel:
 
 | Variable | Description | Required |
 |----------|-------------|----------|
-| `OPENROUTER_API_KEY` | OpenRouter API key for AI features | No* |
+| `OPENROUTER_API_KEY` | Default OpenRouter API key | No |
 
-*The app works without API key for basic web scraping. API key only needed for AI-enhanced search.
+**Note**: The app works without API key for basic web scraping. API key only needed for AI-enhanced search (future feature).
 
 ---
 
