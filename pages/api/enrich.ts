@@ -57,13 +57,26 @@ function extractSocialLinks(html: string, baseUrl: string): Record<string, strin
       fullUrl = new URL(href, baseUrl).toString();
     }
     
-    // Check each platform
+    const lowerUrl = fullUrl.toLowerCase();
+    
+    // Check each platform with proper validation
     for (const [platform, patterns] of Object.entries(SOCIAL_PLATFORMS)) {
       if (!socialLinks[platform]) {
         for (const pattern of patterns) {
-          if (fullUrl.toLowerCase().includes(pattern)) {
-            socialLinks[platform] = fullUrl.split('?')[0].split('#')[0];
-            break;
+          if (lowerUrl.includes(pattern)) {
+            // Validate it's actually a profile URL, not just contains the domain
+            const cleanUrl = fullUrl.split('?')[0].split('#')[0];
+            
+            // Additional validation: check if URL has content after the platform domain
+            const urlParts = cleanUrl.split(pattern);
+            if (urlParts.length > 1 && urlParts[1].length > 0) {
+              // Make sure it's not just the domain or a generic page
+              const pathAfterDomain = urlParts[1];
+              if (pathAfterDomain !== '/' && !pathAfterDomain.startsWith('/search') && !pathAfterDomain.startsWith('/login')) {
+                socialLinks[platform] = cleanUrl;
+                break;
+              }
+            }
           }
         }
       }
@@ -77,12 +90,23 @@ function extractSocialLinks(html: string, baseUrl: string): Record<string, strin
     const name = $(element).attr('name') || '';
     
     if (content && (property.includes('og:') || name.includes('twitter:'))) {
+      const lowerContent = content.toLowerCase();
+      
       for (const [platform, patterns] of Object.entries(SOCIAL_PLATFORMS)) {
         if (!socialLinks[platform]) {
           for (const pattern of patterns) {
-            if (content.toLowerCase().includes(pattern)) {
-              socialLinks[platform] = content.split('?')[0].split('#')[0];
-              break;
+            if (lowerContent.includes(pattern)) {
+              const cleanUrl = content.split('?')[0].split('#')[0];
+              
+              // Validate it's a proper profile URL
+              const urlParts = cleanUrl.split(pattern);
+              if (urlParts.length > 1 && urlParts[1].length > 0) {
+                const pathAfterDomain = urlParts[1];
+                if (pathAfterDomain !== '/' && !pathAfterDomain.startsWith('/search') && !pathAfterDomain.startsWith('/login')) {
+                  socialLinks[platform] = cleanUrl;
+                  break;
+                }
+              }
             }
           }
         }
