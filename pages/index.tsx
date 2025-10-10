@@ -23,6 +23,8 @@ interface EnrichResult {
 export default function Home() {
   const [activeTab, setActiveTab] = useState<'single' | 'bulk'>('single');
   const [companyInput, setCompanyInput] = useState('');
+  const [apiKey, setApiKey] = useState('');
+  const [showApiKey, setShowApiKey] = useState(false);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<EnrichResult | null>(null);
   const [bulkResults, setBulkResults] = useState<EnrichResult[]>([]);
@@ -39,6 +41,7 @@ export default function Home() {
       const response = await axios.post<EnrichResult>('/api/enrich', {
         company: companyInput,
         method: 'extraction',
+        apiKey: apiKey || undefined,
       });
       setResult(response.data);
     } catch (error) {
@@ -122,6 +125,7 @@ export default function Home() {
         const response = await axios.post<EnrichResult>('/api/enrich', {
           company: companies[i],
           method: 'extraction',
+          apiKey: apiKey || undefined,
         });
         results.push(response.data);
       } catch (error) {
@@ -171,6 +175,36 @@ export default function Home() {
             </h1>
             <p className="text-gray-600">
               Find official social media profiles and contact pages for any company
+            </p>
+          </div>
+
+          {/* API Key Configuration */}
+          <div className="bg-white rounded-lg shadow-md p-4 mb-6 max-w-2xl mx-auto">
+            <div className="flex items-center gap-4">
+              <div className="flex-1">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  OpenRouter API Key (Optional)
+                </label>
+                <input
+                  type={showApiKey ? 'text' : 'password'}
+                  value={apiKey}
+                  onChange={(e) => setApiKey(e.target.value)}
+                  placeholder="Enter your OpenRouter API key for enhanced features"
+                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent text-sm"
+                />
+              </div>
+              <button
+                onClick={() => setShowApiKey(!showApiKey)}
+                className="mt-6 px-4 py-2 text-sm text-gray-600 hover:text-gray-900 border border-gray-300 rounded-lg"
+              >
+                {showApiKey ? 'Hide' : 'Show'}
+              </button>
+            </div>
+            <p className="text-xs text-gray-500 mt-2">
+              💡 App works without API key. Add key for AI-enhanced search. Get one at{' '}
+              <a href="https://openrouter.ai" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+                openrouter.ai
+              </a>
             </p>
           </div>
 
