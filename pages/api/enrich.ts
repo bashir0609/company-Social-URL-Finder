@@ -1,0 +1,309 @@
+import type { NextApiRequest, NextApiResponse } from 'next';
+import axios from 'axios';
+import * as cheerio from 'cheerio';
+
+const SOCIAL_PLATFORMS = {
+  linkedin: ['linkedin.com/company/', 'linkedin.com/in/', 'linkedin.com/school/'],
+  facebook: ['facebook.com/', 'fb.com/'],
+  twitter: ['twitter.com/', 'x.com/'],
+  instagram: ['instagram.com/'],
+  youtube: ['youtube.com/channel/', 'youtube.com/c/', 'youtube.com/@', 'youtube.com/user/'],
+  tiktok: ['tiktok.com/@'],
+  pinterest: ['pinterest.com/'],
+  github: ['github.com/'],
+};
+
+interface EnrichResult {
+  company_name: string;
+  website: string;
+  contact_page: string;
+  linkedin: string;
+  facebook: string;
+  twitter: string;
+  instagram: string;
+  youtube: string;
+  tiktok: string;
+  pinterest: string;
+  github: string;
+  status: string;
+}
+
+async function fetchPageContent(url: string): Promise<string | null> {
+  try {
+    const response = await axios.get(url, {
+      timeout: 15000,
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+      },
+    });
+    return response.data;
+  } catch (error) {
+    console.error(`Error fetching ${url}:`, error);
+    return null;
+  }
+}
+
+function extractSocialLinks(html: string, baseUrl: string): Record<string, string> {
+  const $ = cheerio.load(html);
+  const socialLinks: Record<string, string> = {};
+  
+  // Find all links
+  $('a[href]').each((_, element) => {
+    const href = $(element).attr('href');
+    if (!href) return;
+    
+    let fullUrl = href;
+    if (href.startsWith('/')) {
+      fullUrl = new URL(href, baseUrl).toString();
+    }
+    
+    // Check each platform
+    for (const [platform, patterns] of Object.entries(SOCIAL_PLATFORMS)) {
+      if (!socialLinks[platform]) {
+        for (const pattern of patterns) {
+          if (fullUrl.toLowerCase().includes(pattern)) {
+            socialLinks[platform] = fullUrl.split('?')[0].split('#')[0];
+            break;
+          }
+        }
+      }
+    }
+  });
+  
+  // Check meta tags
+  $('meta').each((_, element) => {
+    const content = $(element).attr('content');
+    const property = $(element).attr('property') || '';
+    const name = $(element).attr('name') || '';
+    
+    if (content && (property.includes('og:') || name.includes('twitter:'))) {
+      for (const [platform, patterns] of Object.entries(SOCIAL_PLATFORMS)) {
+        if (!socialLinks[platform]) {
+          for (const pattern of patterns) {
+            if (content.toLowerCase().includes(pattern)) {
+              socialLinks[platform] = content.split('?')[0].split('#')[0];
+              break;
+            }
+          }
+        }
+      }
+    }
+  });
+  
+  return socialLinks;
+}
+
+async function searchSocialProfile(companyName: string, platform: string, website: string): Promise<string | null> {
+  const cleanName = companyName.replace(/\.(com|io|net|org)$/i, '').trim();
+  
+  // Try direct URL construction
+  const patterns: string[] = [];
+  
+  if (platform === 'linkedin') {
+    patterns.push(
+      `https://www.linkedin.com/company/${cleanName.toLowerCase().replace(/\s+/g, '-')}`,
+      `https://www.linkedin.com/company/${cleanName.toLowerCase().replace(/\s+/g, '')}`
+    );
+  } else if (platform === 'twitter') {
+    patterns.push(
+      `https://twitter.com/${cleanName.toLowerCase().replace(/\s+/g, '')}`,
+      `https://x.com/${cleanName.toLowerCase().replace(/\s+/g, '')}`
+    );
+  } else if (platform === 'facebook') {
+    patterns.push(
+      `https://www.facebook.com/${cleanName.toLowerCase().replace(/\s+/g, '')}`,
+      `https://www.facebook.com/${cleanName.toLowerCase().replace(/\s+/g, '-')}`
+    );
+  } else if (platform === 'instagram') {
+    patterns.push(
+      `https://www.instagram.com/${cleanName.toLowerCase().replace(/\s+/g, '')}`,
+      `https://www.instagram.com/${cleanName.toLowerCase().replace(/\s+/g, '_')}`
+    );
+  } else if (platform === 'youtube') {
+    patterns.push(
+      `https://www.youtube.com/@${cleanName.toLowerCase().replace(/\s+/g, '')}`,
+      `https://www.youtube.com/c/${cleanName.toLowerCase().replace(/\s+/g, '')}`
+    );
+  }
+  
+  // Try each pattern
+  for (const pattern of patterns) {
+    try {
+      const response = await axios.head(pattern, { timeout: 3000 });
+      if (response.status === 200) {
+        return pattern;
+      }
+    } catch {
+      continue;
+    }
+  }
+  
+  return null;
+}
+
+function normalizeUrl(url: string): string {
+  if (!url) return '';
+  url = url.trim();
+  if (!url.startsWith('http://') && !url.startsWith('https://')) {
+    url = 'https://' + url;
+  }
+  return url;
+}
+
+async function findCompanyWebsite(companyName: string): Promise<string> {
+  const cleanName = companyName.trim().toLowerCase();
+  
+  // Try common patterns
+  const patterns = [
+    `${cleanName.replace(/\s+/g, '')}.com`,
+    `${cleanName.replace(/\s+/g, '-')}.com`,
+    `${cleanName.replace(/\s+/g, '')}.io`,
+    `${cleanName.replace(/\s+/g, '')}.net`,
+  ];
+  
+  for (const pattern of patterns) {
+    try {
+      const url = normalizeUrl(pattern);
+      const response = await axios.head(url, { timeout: 5000 });
+      if (response.status === 200) {
+        return url;
+      }
+    } catch {
+      continue;
+    }
+  }
+  
+  return '';
+}
+
+export default async function handler(
+  req: NextApiRequest,
+  res: NextApiResponse<EnrichResult>
+) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({
+      company_name: '',
+      website: '',
+      contact_page: 'Not found',
+      linkedin: 'Not found',
+      facebook: 'Not found',
+      twitter: 'Not found',
+      instagram: 'Not found',
+      youtube: 'Not found',
+      tiktok: 'Not found',
+      pinterest: 'Not found',
+      github: 'Not found',
+      status: 'Method not allowed',
+    });
+  }
+
+  const { company, method = 'extraction' } = req.body;
+
+  if (!company) {
+    return res.status(400).json({
+      company_name: '',
+      website: '',
+      contact_page: 'Not found',
+      linkedin: 'Not found',
+      facebook: 'Not found',
+      twitter: 'Not found',
+      instagram: 'Not found',
+      youtube: 'Not found',
+      tiktok: 'Not found',
+      pinterest: 'Not found',
+      github: 'Not found',
+      status: 'Company name required',
+    });
+  }
+
+  const result: EnrichResult = {
+    company_name: company,
+    website: '',
+    contact_page: 'Not found',
+    linkedin: 'Not found',
+    facebook: 'Not found',
+    twitter: 'Not found',
+    instagram: 'Not found',
+    youtube: 'Not found',
+    tiktok: 'Not found',
+    pinterest: 'Not found',
+    github: 'Not found',
+    status: 'Processing',
+  };
+
+  try {
+    // Determine if input is URL or company name
+    const isUrl = /\.(com|io|net|org|co|ai|dev|app|tech)\b/i.test(company);
+    
+    let website: string;
+    if (isUrl) {
+      website = normalizeUrl(company);
+    } else {
+      website = await findCompanyWebsite(company);
+    }
+
+    if (!website) {
+      result.status = 'Failed: Could not find website';
+      return res.status(200).json(result);
+    }
+
+    result.website = website;
+
+    // Fetch website content
+    const html = await fetchPageContent(website);
+    
+    if (!html) {
+      result.status = 'Failed: Could not fetch website';
+      return res.status(200).json(result);
+    }
+
+    // Extract social links
+    const socialLinks = extractSocialLinks(html, website);
+    
+    // Update result with found links
+    for (const [platform, url] of Object.entries(socialLinks)) {
+      if (platform in result) {
+        result[platform as keyof EnrichResult] = url;
+      }
+    }
+
+    // Search for missing platforms
+    const missingPlatforms = ['linkedin', 'facebook', 'twitter', 'instagram', 'youtube'];
+    for (const platform of missingPlatforms) {
+      if (result[platform as keyof EnrichResult] === 'Not found') {
+        const foundUrl = await searchSocialProfile(company, platform, website);
+        if (foundUrl) {
+          result[platform as keyof EnrichResult] = foundUrl;
+        }
+      }
+    }
+
+    // Find contact page
+    const $ = cheerio.load(html);
+    const contactKeywords = ['contact', 'contact-us', 'contactus', 'get-in-touch', 'reach-us'];
+    
+    $('a[href]').each((_, element) => {
+      const href = $(element).attr('href');
+      if (!href) return;
+      
+      const lowerHref = href.toLowerCase();
+      for (const keyword of contactKeywords) {
+        if (lowerHref.includes(keyword)) {
+          let contactUrl = href;
+          if (href.startsWith('/')) {
+            contactUrl = new URL(href, website).toString();
+          }
+          result.contact_page = contactUrl;
+          return false; // break
+        }
+      }
+    });
+
+    result.status = 'Success';
+    return res.status(200).json(result);
+
+  } catch (error) {
+    result.status = `Error: ${error instanceof Error ? error.message : 'Unknown error'}`;
+    return res.status(200).json(result);
+  }
+}
