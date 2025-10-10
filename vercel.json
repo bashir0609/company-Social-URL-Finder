@@ -1,11 +1,3 @@
 {
-  "version": 2,
-  "env": {
-    "OPENROUTER_API_KEY": "@openrouter_api_key"
-  },
-  "build": {
-    "env": {
-      "OPENROUTER_API_KEY": "@openrouter_api_key"
-    }
-  }
+  "version": 2
 }
