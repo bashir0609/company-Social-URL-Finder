@@ -27,6 +27,7 @@ interface EnrichResult {
   tiktok: string;
   pinterest: string;
   github: string;
+  keywords?: string[];
   status: string;
 }
 
@@ -142,6 +143,121 @@ function extractEmailAndPhone(html: string): { email: string; phone: string } {
   }
   
   return result;
+}
+
+function extractKeywords(html: string): string[] {
+  const $ = cheerio.load(html);
+  
+  // Remove script, style, and other non-content tags
+  $('script, style, nav, header, footer').remove();
+  
+  // Get text content
+  const text = $('body').text()
+    .toLowerCase()
+    .replace(/[^\w\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  
+  // Common stop words to filter out
+  const stopWords = new Set(['the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'from', 'as', 'is', 'was', 'are', 'were', 'been', 'be', 'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'should', 'could', 'may', 'might', 'must', 'can', 'this', 'that', 'these', 'those', 'i', 'you', 'he', 'she', 'it', 'we', 'they', 'what', 'which', 'who', 'when', 'where', 'why', 'how', 'all', 'each', 'every', 'both', 'few', 'more', 'most', 'other', 'some', 'such', 'no', 'nor', 'not', 'only', 'own', 'same', 'so', 'than', 'too', 'very', 's', 't', 'just', 'don', 'now', 'our', 'your', 'their']);
+  
+  // Extract words and count frequency
+  const words = text.split(' ').filter(word => 
+    word.length > 3 && 
+    !stopWords.has(word) &&
+    !/^\d+$/.test(word) // exclude pure numbers
+  );
+  
+  // Count word frequency
+  const wordCount: Record<string, number> = {};
+  words.forEach(word => {
+    wordCount[word] = (wordCount[word] || 0) + 1;
+  });
+  
+  // Sort by frequency and get top 15-20
+  const sortedWords = Object.entries(wordCount)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 20)
+    .map(([word]) => word);
+  
+  return sortedWords;
+}
+
+async function geminiAISearch(
+  company: string,
+  apiKey: string,
+  customPrompt?: string
+): Promise<Partial<EnrichResult>> {
+  const defaultPrompt = `Find all official social media profiles for the company "${company}". 
+Return ONLY the direct URLs in this exact JSON format:
+{
+  "website": "company website URL",
+  "linkedin": "LinkedIn company page URL",
+  "facebook": "Facebook page URL", 
+  "twitter": "Twitter/X profile URL",
+  "instagram": "Instagram profile URL",
+  "youtube": "YouTube channel URL",
+  "tiktok": "TikTok profile URL",
+  "email": "contact email",
+  "phone": "contact phone"
+}
+If you cannot find a specific profile, use "Not found" as the value.
+Return ONLY valid JSON, no additional text.`;
+
+  const prompt = customPrompt || defaultPrompt;
+
+  try {
+    const response = await axios.post(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${apiKey}`,
+      {
+        contents: [{
+          parts: [{
+            text: prompt.replace('[company name]', company)
+          }]
+        }]
+      },
+      {
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        timeout: 30000,
+      }
+    );
+
+    const aiResponse = response.data.candidates[0]?.content?.parts[0]?.text || '{}';
+    
+    // Try to extract JSON from the response
+    let jsonMatch = aiResponse.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      console.log('No JSON found in Gemini response:', aiResponse);
+      return {};
+    }
+
+    const parsedData = JSON.parse(jsonMatch[0]);
+    
+    // Validate and clean the URLs
+    const cleanedData: Partial<EnrichResult> = {};
+    const urlFields = ['website', 'linkedin', 'facebook', 'twitter', 'instagram', 'youtube', 'tiktok', 'contact_page'];
+    
+    for (const field of urlFields) {
+      if (parsedData[field] && parsedData[field] !== 'Not found' && parsedData[field].startsWith('http')) {
+        cleanedData[field as keyof EnrichResult] = parsedData[field];
+      }
+    }
+    
+    // Add email and phone if found
+    if (parsedData.email && parsedData.email !== 'Not found') {
+      cleanedData.email = parsedData.email;
+    }
+    if (parsedData.phone && parsedData.phone !== 'Not found') {
+      cleanedData.phone = parsedData.phone;
+    }
+
+    return cleanedData;
+  } catch (error: any) {
+    console.error('Gemini AI search error:', error.response?.data || error.message);
+    return {};
+  }
 }
 
 async function aiSearchSocialProfiles(
@@ -409,10 +525,11 @@ export default async function handler(
     });
   }
 
-  const { company, method = 'extraction', apiKey, customPrompt, model } = req.body;
+  const { company, method = 'extraction', apiKey, geminiApiKey, customPrompt, model, aiProvider = 'openrouter' } = req.body;
 
   // Use API key from request body or environment variable
   const effectiveApiKey = apiKey || process.env.OPENROUTER_API_KEY;
+  const effectiveGeminiKey = geminiApiKey || process.env.GEMINI_API_KEY;
 
   if (!company) {
     return res.status(400).json({
@@ -451,16 +568,17 @@ export default async function handler(
   };
 
   try {
-    // AI METHOD: Use OpenRouter API for intelligent search
-    if (method === 'ai' && effectiveApiKey) {
-      console.log(`Using AI method with model: ${model || 'default'}`);
+    // AI METHOD: Use AI provider (OpenRouter or Gemini) for intelligent search
+    if (method === 'ai') {
+      let aiResults: Partial<EnrichResult> = {};
       
-      const aiResults = await aiSearchSocialProfiles(
-        company,
-        effectiveApiKey,
-        model,
-        customPrompt
-      );
+      if (aiProvider === 'gemini' && effectiveGeminiKey) {
+        console.log('Using Gemini AI');
+        aiResults = await geminiAISearch(company, effectiveGeminiKey, customPrompt);
+      } else if (aiProvider === 'openrouter' && effectiveApiKey) {
+        console.log(`Using OpenRouter AI with model: ${model || 'default'}`);
+        aiResults = await aiSearchSocialProfiles(company, effectiveApiKey, model, customPrompt);
+      }
       
       // Merge AI results into result object
       for (const [key, value] of Object.entries(aiResults)) {
@@ -575,6 +693,9 @@ export default async function handler(
         }
       }
     }
+
+    // Extract keywords from website
+    result.keywords = extractKeywords(html);
 
     result.status = 'Success';
     return res.status(200).json(result);
