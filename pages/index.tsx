@@ -45,6 +45,9 @@ export default function Home() {
   const [showPlatformFilter, setShowPlatformFilter] = useState(false);
   const [visitorCount, setVisitorCount] = useState(0);
   const [searchCount, setSearchCount] = useState(0);
+  const [availableModels, setAvailableModels] = useState<Array<{id: string; name: string}>>([]);
+  const [selectedModel, setSelectedModel] = useState<string>('openai/gpt-3.5-turbo');
+  const [loadingModels, setLoadingModels] = useState(false);
 
   // Load recent searches, dark mode, and visitor stats from localStorage
   useEffect(() => {
@@ -119,6 +122,28 @@ export default function Home() {
     localStorage.setItem('recentSearches', JSON.stringify(updated));
   };
 
+  // Fetch available models from OpenRouter
+  const fetchModels = async () => {
+    if (!apiKey) {
+      setErrorMessage('🔑 Please enter your OpenRouter API key first to fetch models.');
+      return;
+    }
+
+    setLoadingModels(true);
+    try {
+      const response = await axios.get(`/api/models?apiKey=${encodeURIComponent(apiKey)}`);
+      setAvailableModels(response.data.models);
+      if (response.data.models.length > 0) {
+        setSelectedModel(response.data.models[0].id);
+      }
+    } catch (error: any) {
+      console.error('Error fetching models:', error);
+      setErrorMessage('❌ Failed to fetch models. Check your API key.');
+    } finally {
+      setLoadingModels(false);
+    }
+  };
+
   // Copy to clipboard
   const copyToClipboard = async (text: string) => {
     try {
@@ -182,6 +207,7 @@ export default function Home() {
         apiKey: apiKey || undefined,
         customPrompt: customPrompt || undefined,
         platforms: selectedPlatforms,
+        model: selectedModel,
       });
       setResult(response.data);
       setSearchProgress('');
@@ -437,6 +463,52 @@ export default function Home() {
               </div>
             </div>
 
+            {/* AI Model Selection */}
+            {method === 'ai' && (
+              <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-sm font-medium text-gray-700">
+                    AI Model
+                  </label>
+                  <button
+                    onClick={fetchModels}
+                    disabled={loadingModels || !apiKey}
+                    className="text-xs px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:bg-gray-400 flex items-center gap-1"
+                  >
+                    {loadingModels ? (
+                      <>
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                        Loading...
+                      </>
+                    ) : (
+                      <>
+                        <RefreshCw className="w-3 h-3" />
+                        Fetch Models
+                      </>
+                    )}
+                  </button>
+                </div>
+                
+                {availableModels.length > 0 ? (
+                  <select
+                    value={selectedModel}
+                    onChange={(e) => setSelectedModel(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent text-sm"
+                  >
+                    {availableModels.map((model) => (
+                      <option key={model.id} value={model.id}>
+                        {model.name}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <p className="text-xs text-gray-600">
+                    Click "Fetch Models" to load available AI models from OpenRouter
+                  </p>
+                )}
+              </div>
+            )}
+
             {/* Advanced Settings */}
             <button
               onClick={() => setShowAdvanced(!showAdvanced)}
@@ -454,12 +526,14 @@ export default function Home() {
                   <textarea
                     value={customPrompt}
                     onChange={(e) => setCustomPrompt(e.target.value)}
-                    placeholder="Enter custom instructions for AI search..."
-                    rows={3}
+                    placeholder="Default: Find all official social media profiles (LinkedIn, Facebook, Twitter, Instagram, YouTube, TikTok) for [company name]. Return the direct profile URLs."
+                    rows={4}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent text-sm"
                   />
                   <p className="text-xs text-gray-500 mt-1">
-                    Customize how AI searches for social profiles. Leave empty for default behavior.
+                    💡 <strong>Default prompt:</strong> "Find all official social media profiles (LinkedIn, Facebook, Twitter, Instagram, YouTube, TikTok) for [company name]. Return the direct profile URLs."
+                    <br />
+                    Customize the prompt above to change how AI searches. Leave empty to use default.
                   </p>
                 </div>
 
