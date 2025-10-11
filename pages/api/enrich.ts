@@ -681,8 +681,8 @@ export default async function handler(
     
     // Update result with found links (don't overwrite AI results)
     for (const [platform, url] of Object.entries(socialLinks)) {
-      if (platform in result && result[platform as keyof EnrichResult] === 'Not found') {
-        result[platform as keyof EnrichResult] = url;
+      if (platform in result && platform !== 'keywords' && result[platform as keyof EnrichResult] === 'Not found') {
+        result[platform as keyof EnrichResult] = url as any;
       }
     }
 
@@ -692,7 +692,7 @@ export default async function handler(
       if (result[platform as keyof EnrichResult] === 'Not found') {
         const foundUrl = await searchSocialProfile(company, platform, website);
         if (foundUrl) {
-          result[platform as keyof EnrichResult] = foundUrl;
+          result[platform as keyof EnrichResult] = foundUrl as any;
         }
       }
     }
