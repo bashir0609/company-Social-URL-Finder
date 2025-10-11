@@ -625,27 +625,28 @@ export default async function handler(
         result.website = aiResults.website;
       }
       
-      // Check if AI found contact info
-      const hasContactInfo = result.email !== 'Not found' && 
-                            result.phone !== 'Not found' &&
-                            result.contact_page !== 'Not found';
-      
-      // Check if AI found social links
-      const hasSocialLinks = result.linkedin !== 'Not found' && 
-                            result.facebook !== 'Not found' && 
-                            result.twitter !== 'Not found';
-      
-      // If AI method and found everything, return immediately
-      if (method === 'ai' && hasContactInfo && hasSocialLinks) {
+      // If AI method, try to extract keywords from AI-found website, then return
+      if (method === 'ai') {
+        // If AI found a website, try to extract keywords from it
+        if (result.website && result.website !== 'Not found') {
+          try {
+            const websiteHtml = await fetchPageContent(result.website);
+            if (websiteHtml) {
+              result.keywords = extractKeywords(websiteHtml);
+            }
+          } catch (error) {
+            console.log('Could not extract keywords from AI-found website');
+          }
+        }
+        
         result.status = 'Success (AI-powered)';
+        console.log('AI method: Returning pure AI results');
         return res.status(200).json(result);
       }
       
-      // For hybrid or incomplete AI results, continue to extraction
+      // For hybrid method, continue to extraction to fill missing data
       if (method === 'hybrid') {
         console.log('Hybrid mode: Using extraction to fill missing data');
-      } else {
-        console.log('AI search incomplete, falling back to extraction for missing fields');
       }
     }
     
