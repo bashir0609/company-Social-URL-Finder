@@ -319,6 +319,8 @@ export default function Home() {
           method: method,
           apiKey: apiKey || undefined,
           customPrompt: customPrompt || undefined,
+          platforms: selectedPlatforms,
+          model: selectedModel,
         });
         results.push(response.data);
       } catch (error) {
