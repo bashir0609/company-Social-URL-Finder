@@ -568,15 +568,15 @@ export default async function handler(
   };
 
   try {
-    // AI METHOD: Use AI provider (OpenRouter or Gemini) for intelligent search
-    if (method === 'ai') {
+    // AI METHOD or HYBRID: Use AI provider (OpenRouter or Gemini) for intelligent search
+    if (method === 'ai' || method === 'hybrid') {
       let aiResults: Partial<EnrichResult> = {};
       
       if (aiProvider === 'gemini' && effectiveGeminiKey) {
-        console.log('Using Gemini AI');
+        console.log(`Using Gemini AI (${method} mode)`);
         aiResults = await geminiAISearch(company, effectiveGeminiKey, customPrompt);
       } else if (aiProvider === 'openrouter' && effectiveApiKey) {
-        console.log(`Using OpenRouter AI with model: ${model || 'default'}`);
+        console.log(`Using OpenRouter AI with model: ${model || 'default'} (${method} mode)`);
         aiResults = await aiSearchSocialProfiles(company, effectiveApiKey, model, customPrompt);
       }
       
@@ -605,14 +605,18 @@ export default async function handler(
                             result.facebook !== 'Not found' && 
                             result.twitter !== 'Not found';
       
-      // If AI found everything, return immediately
-      if (hasContactInfo && hasSocialLinks) {
+      // If AI method and found everything, return immediately
+      if (method === 'ai' && hasContactInfo && hasSocialLinks) {
         result.status = 'Success (AI-powered)';
         return res.status(200).json(result);
       }
       
-      // Otherwise, fall back to extraction for missing fields
-      console.log('AI search incomplete, falling back to extraction for missing fields');
+      // For hybrid or incomplete AI results, continue to extraction
+      if (method === 'hybrid') {
+        console.log('Hybrid mode: Using extraction to fill missing data');
+      } else {
+        console.log('AI search incomplete, falling back to extraction for missing fields');
+      }
     }
     
     // EXTRACTION METHOD: Traditional web scraping
@@ -700,7 +704,15 @@ export default async function handler(
     // Extract keywords from website
     result.keywords = extractKeywords(html);
 
-    result.status = 'Success';
+    // Set status based on method used
+    if (method === 'hybrid') {
+      result.status = 'Success (Hybrid: AI + Extraction)';
+    } else if (method === 'ai') {
+      result.status = 'Success (AI-powered with extraction fallback)';
+    } else {
+      result.status = 'Success';
+    }
+    
     return res.status(200).json(result);
 
   } catch (error) {
