@@ -474,18 +474,24 @@ export default async function handler(
         result.website = aiResults.website;
       }
       
-      // If AI didn't find everything, fall back to extraction for missing fields
-      const hasAllData = result.linkedin !== 'Not found' && 
-                        result.facebook !== 'Not found' && 
-                        result.twitter !== 'Not found';
+      // Check if AI found contact info
+      const hasContactInfo = result.email !== 'Not found' && 
+                            result.phone !== 'Not found' &&
+                            result.contact_page !== 'Not found';
       
-      if (!hasAllData) {
-        console.log('AI search incomplete, falling back to extraction for missing fields');
-        // Continue to extraction method below
-      } else {
+      // Check if AI found social links
+      const hasSocialLinks = result.linkedin !== 'Not found' && 
+                            result.facebook !== 'Not found' && 
+                            result.twitter !== 'Not found';
+      
+      // If AI found everything, return immediately
+      if (hasContactInfo && hasSocialLinks) {
         result.status = 'Success (AI-powered)';
         return res.status(200).json(result);
       }
+      
+      // Otherwise, fall back to extraction for missing fields
+      console.log('AI search incomplete, falling back to extraction for missing fields');
     }
     
     // EXTRACTION METHOD: Traditional web scraping
@@ -514,11 +520,39 @@ export default async function handler(
       return res.status(200).json(result);
     }
 
+    // Load HTML once for all extractions
+    const $ = cheerio.load(html);
+
+    // Extract contact page first
+    if (result.contact_page === 'Not found') {
+      const contactKeywords = ['contact', 'contact-us', 'contactus', 'get-in-touch', 'reach-us'];
+      
+      $('a[href]').each((_, element) => {
+        const href = $(element).attr('href');
+        if (!href) return;
+        
+        const lowerHref = href.toLowerCase();
+        for (const keyword of contactKeywords) {
+          if (lowerHref.includes(keyword)) {
+            let contactUrl = href;
+            if (href.startsWith('/')) {
+              contactUrl = new URL(href, website).toString();
+            } else if (!href.startsWith('http')) {
+              contactUrl = new URL(href, website).toString();
+            }
+            result.contact_page = contactUrl;
+            return false; // break
+          }
+        }
+      });
+    }
+
     // Extract email and phone (only if not already found by AI)
     if (result.email === 'Not found' || result.phone === 'Not found') {
       const contactInfo = extractEmailAndPhone(html);
       if (result.email === 'Not found') result.email = contactInfo.email;
       if (result.phone === 'Not found') result.phone = contactInfo.phone;
+      console.log(`Extracted contact info for ${company}: email=${contactInfo.email}, phone=${contactInfo.phone}`);
     }
 
     // Extract social links (only for platforms not found by AI)
@@ -541,27 +575,6 @@ export default async function handler(
         }
       }
     }
-
-    // Find contact page
-    const $ = cheerio.load(html);
-    const contactKeywords = ['contact', 'contact-us', 'contactus', 'get-in-touch', 'reach-us'];
-    
-    $('a[href]').each((_, element) => {
-      const href = $(element).attr('href');
-      if (!href) return;
-      
-      const lowerHref = href.toLowerCase();
-      for (const keyword of contactKeywords) {
-        if (lowerHref.includes(keyword)) {
-          let contactUrl = href;
-          if (href.startsWith('/')) {
-            contactUrl = new URL(href, website).toString();
-          }
-          result.contact_page = contactUrl;
-          return false; // break
-        }
-      }
-    });
 
     result.status = 'Success';
     return res.status(200).json(result);
