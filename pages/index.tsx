@@ -948,6 +948,9 @@ export default function Home() {
                         <tr>
                           <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Company</th>
                           <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Website</th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Contact Page</th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Email</th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Phone</th>
                           <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">LinkedIn</th>
                           <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Facebook</th>
                           <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Twitter</th>
@@ -962,6 +965,33 @@ export default function Home() {
                               {result.website ? (
                                 <a href={result.website} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
                                   Link
+                                </a>
+                              ) : (
+                                <span className="text-gray-400">-</span>
+                              )}
+                            </td>
+                            <td className="px-4 py-3 text-sm">
+                              {result.contact_page !== 'Not found' ? (
+                                <a href={result.contact_page} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+                                  Link
+                                </a>
+                              ) : (
+                                <span className="text-gray-400">-</span>
+                              )}
+                            </td>
+                            <td className="px-4 py-3 text-sm">
+                              {result.email !== 'Not found' ? (
+                                <a href={`mailto:${result.email}`} className="text-primary hover:underline truncate max-w-xs block">
+                                  {result.email}
+                                </a>
+                              ) : (
+                                <span className="text-gray-400">-</span>
+                              )}
+                            </td>
+                            <td className="px-4 py-3 text-sm">
+                              {result.phone !== 'Not found' ? (
+                                <a href={`tel:${result.phone}`} className="text-primary hover:underline">
+                                  {result.phone}
                                 </a>
                               ) : (
                                 <span className="text-gray-400">-</span>
