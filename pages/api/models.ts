@@ -9,6 +9,7 @@ interface Model {
     prompt: string;
     completion: string;
   };
+  isFree?: boolean;
 }
 
 export default async function handler(
@@ -34,16 +35,37 @@ export default async function handler(
       },
     });
 
-    // Filter and format models for easier use
-    const models: Model[] = response.data.data
-      .filter((model: any) => !model.id.includes('free') && model.id.includes('gpt') || model.id.includes('claude') || model.id.includes('gemini'))
-      .map((model: any) => ({
-        id: model.id,
-        name: model.name || model.id,
-        description: model.description,
-        pricing: model.pricing,
-      }))
-      .slice(0, 20); // Limit to top 20 models
+    // Filter and format models
+    const allModels: Model[] = response.data.data
+      .map((model: any) => {
+        const isFree = model.pricing?.prompt === '0' || 
+                       model.id.includes('free') ||
+                       parseFloat(model.pricing?.prompt || '1') === 0;
+        
+        return {
+          id: model.id,
+          name: model.name || model.id,
+          description: model.description,
+          pricing: model.pricing,
+          isFree: isFree,
+        };
+      });
+
+    // Separate free and paid models
+    const freeModels = allModels.filter(m => m.isFree);
+    const paidModels = allModels
+      .filter(m => !m.isFree)
+      .filter(m => 
+        m.id.includes('gpt') || 
+        m.id.includes('claude') || 
+        m.id.includes('gemini') ||
+        m.id.includes('llama') ||
+        m.id.includes('mistral')
+      )
+      .slice(0, 15);
+
+    // Combine: Free models first, then popular paid models
+    const models = [...freeModels, ...paidModels];
 
     return res.status(200).json({ models });
   } catch (error: any) {
