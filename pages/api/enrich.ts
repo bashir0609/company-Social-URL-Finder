@@ -17,6 +17,8 @@ interface EnrichResult {
   company_name: string;
   website: string;
   contact_page: string;
+  email: string;
+  phone: string;
   linkedin: string;
   facebook: string;
   twitter: string;
@@ -41,6 +43,67 @@ async function fetchPageContent(url: string): Promise<string | null> {
     console.error(`Error fetching ${url}:`, error);
     return null;
   }
+}
+
+function extractEmailAndPhone(html: string): { email: string; phone: string } {
+  const $ = cheerio.load(html);
+  const result = { email: 'Not found', phone: 'Not found' };
+  
+  // Extract email
+  // Look for mailto links
+  $('a[href^="mailto:"]').each((_, element) => {
+    const href = $(element).attr('href');
+    if (href && result.email === 'Not found') {
+      const email = href.replace('mailto:', '').split('?')[0].trim();
+      // Validate email format
+      if (email.match(/^[^\s@]+@[^\s@]+\.[^\s@]+$/)) {
+        result.email = email;
+      }
+    }
+  });
+  
+  // If no mailto found, search in text content
+  if (result.email === 'Not found') {
+    const text = $('body').text();
+    const emailRegex = /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/g;
+    const emails = text.match(emailRegex);
+    if (emails && emails.length > 0) {
+      // Filter out common non-contact emails
+      const validEmails = emails.filter(email => 
+        !email.includes('example.com') && 
+        !email.includes('test.com') &&
+        !email.includes('sentry.io') &&
+        !email.includes('wixpress.com')
+      );
+      if (validEmails.length > 0) {
+        result.email = validEmails[0];
+      }
+    }
+  }
+  
+  // Extract phone number
+  // Look for tel links
+  $('a[href^="tel:"]').each((_, element) => {
+    const href = $(element).attr('href');
+    if (href && result.phone === 'Not found') {
+      const phone = href.replace('tel:', '').trim();
+      result.phone = phone;
+    }
+  });
+  
+  // If no tel link found, search in text content
+  if (result.phone === 'Not found') {
+    const text = $('body').text();
+    // Match various phone formats
+    const phoneRegex = /(\+?\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}|\+?\d{1,3}[-.\s]?\d{2,4}[-.\s]?\d{3,4}[-.\s]?\d{3,4}/g;
+    const phones = text.match(phoneRegex);
+    if (phones && phones.length > 0) {
+      // Get the first valid-looking phone number
+      result.phone = phones[0].trim();
+    }
+  }
+  
+  return result;
 }
 
 function extractSocialLinks(html: string, baseUrl: string): Record<string, string> {
@@ -209,6 +272,8 @@ export default async function handler(
       company_name: '',
       website: '',
       contact_page: 'Not found',
+      email: 'Not found',
+      phone: 'Not found',
       linkedin: 'Not found',
       facebook: 'Not found',
       twitter: 'Not found',
@@ -232,6 +297,8 @@ export default async function handler(
       company_name: company || '',
       website: '',
       contact_page: 'Not found',
+      email: 'Not found',
+      phone: 'Not found',
       linkedin: 'Not found',
       facebook: 'Not found',
       twitter: 'Not found',
@@ -249,6 +316,8 @@ export default async function handler(
       company_name: '',
       website: '',
       contact_page: 'Not found',
+      email: 'Not found',
+      phone: 'Not found',
       linkedin: 'Not found',
       facebook: 'Not found',
       twitter: 'Not found',
@@ -265,6 +334,8 @@ export default async function handler(
     company_name: company,
     website: '',
     contact_page: 'Not found',
+    email: 'Not found',
+    phone: 'Not found',
     linkedin: 'Not found',
     facebook: 'Not found',
     twitter: 'Not found',
@@ -301,6 +372,11 @@ export default async function handler(
       result.status = 'Failed: Could not fetch website';
       return res.status(200).json(result);
     }
+
+    // Extract email and phone
+    const contactInfo = extractEmailAndPhone(html);
+    result.email = contactInfo.email;
+    result.phone = contactInfo.phone;
 
     // Extract social links
     const socialLinks = extractSocialLinks(html, website);
