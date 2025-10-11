@@ -221,10 +221,28 @@ export default async function handler(
     });
   }
 
-  const { company, method = 'extraction', apiKey } = req.body;
+  const { company, method = 'extraction', apiKey, customPrompt } = req.body;
 
   // Use API key from request body or environment variable
   const effectiveApiKey = apiKey || process.env.OPENROUTER_API_KEY;
+
+  // Validate AI method requirements
+  if (method === 'ai' && !effectiveApiKey) {
+    return res.status(400).json({
+      company_name: company || '',
+      website: '',
+      contact_page: 'Not found',
+      linkedin: 'Not found',
+      facebook: 'Not found',
+      twitter: 'Not found',
+      instagram: 'Not found',
+      youtube: 'Not found',
+      tiktok: 'Not found',
+      pinterest: 'Not found',
+      github: 'Not found',
+      status: 'AI method requires API key',
+    });
+  }
 
   if (!company) {
     return res.status(400).json({
