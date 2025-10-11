@@ -218,21 +218,34 @@ async function geminiAISearch(
   apiKey: string,
   customPrompt?: string
 ): Promise<Partial<EnrichResult>> {
-  const defaultPrompt = `Find all official social media profiles for the company "${company}". 
-Return ONLY the direct URLs in this exact JSON format:
+  const defaultPrompt = `You are a professional company research assistant. Find the official online presence for "${company}".
+
+IMPORTANT INSTRUCTIONS:
+1. Search for VERIFIED and OFFICIAL profiles only
+2. Return COMPLETE URLs (starting with https://)
+3. For social media, find the main company/brand page (not employee profiles)
+4. Verify the profile belongs to the correct company
+5. If uncertain or not found, use "Not found"
+6. Generate 10-15 relevant keywords that describe the company's business, industry, products, or services
+
+Return your findings in this EXACT JSON format (no markdown, no explanation):
 {
-  "website": "company website URL",
-  "linkedin": "LinkedIn company page URL",
-  "facebook": "Facebook page URL", 
-  "twitter": "Twitter/X profile URL",
+  "website": "official company website URL",
+  "linkedin": "LinkedIn company page URL (linkedin.com/company/...)",
+  "facebook": "Facebook page URL",
+  "twitter": "Twitter/X profile URL (twitter.com/... or x.com/...)",
   "instagram": "Instagram profile URL",
   "youtube": "YouTube channel URL",
   "tiktok": "TikTok profile URL",
-  "email": "contact email",
-  "phone": "contact phone"
+  "pinterest": "Pinterest profile URL",
+  "github": "GitHub organization URL",
+  "email": "official contact email",
+  "phone": "contact phone number with country code",
+  "contact_page": "contact/about page URL",
+  "keywords": ["keyword1", "keyword2", "keyword3", "..."]
 }
-If you cannot find a specific profile, use "Not found" as the value.
-Return ONLY valid JSON, no additional text.`;
+
+Return ONLY the JSON object, nothing else.`;
 
   const prompt = customPrompt || defaultPrompt;
 
@@ -296,21 +309,34 @@ async function aiSearchSocialProfiles(
   model: string = 'openai/gpt-3.5-turbo',
   customPrompt?: string
 ): Promise<Partial<EnrichResult>> {
-  const defaultPrompt = `Find all official social media profiles for the company "${company}". 
-Return ONLY the direct URLs in this exact JSON format:
+  const defaultPrompt = `You are a professional company research assistant. Find the official online presence for "${company}".
+
+IMPORTANT INSTRUCTIONS:
+1. Search for VERIFIED and OFFICIAL profiles only
+2. Return COMPLETE URLs (starting with https://)
+3. For social media, find the main company/brand page (not employee profiles)
+4. Verify the profile belongs to the correct company
+5. If uncertain or not found, use "Not found"
+6. Generate 10-15 relevant keywords that describe the company's business, industry, products, or services
+
+Return your findings in this EXACT JSON format (no markdown, no explanation):
 {
-  "website": "company website URL",
-  "linkedin": "LinkedIn company page URL",
-  "facebook": "Facebook page URL", 
-  "twitter": "Twitter/X profile URL",
+  "website": "official company website URL",
+  "linkedin": "LinkedIn company page URL (linkedin.com/company/...)",
+  "facebook": "Facebook page URL",
+  "twitter": "Twitter/X profile URL (twitter.com/... or x.com/...)",
   "instagram": "Instagram profile URL",
   "youtube": "YouTube channel URL",
   "tiktok": "TikTok profile URL",
-  "email": "contact email",
-  "phone": "contact phone"
+  "pinterest": "Pinterest profile URL",
+  "github": "GitHub organization URL",
+  "email": "official contact email",
+  "phone": "contact phone number with country code",
+  "contact_page": "contact/about page URL",
+  "keywords": ["keyword1", "keyword2", "keyword3", "..."]
 }
-If you cannot find a specific profile, use "Not found" as the value.
-Return ONLY valid JSON, no additional text.`;
+
+Return ONLY the JSON object, nothing else.`;
 
   const prompt = customPrompt || defaultPrompt;
 
@@ -610,11 +636,13 @@ export default async function handler(
         aiResults = await aiSearchSocialProfiles(company, effectiveApiKey, model, customPrompt);
       }
       
-      // Merge AI results into result object
+      // Merge AI results into result object (including AI-generated keywords)
       for (const [key, value] of Object.entries(aiResults)) {
         if (value && value !== 'Not found') {
-          // Skip keywords field as it's handled separately
-          if (key !== 'keywords') {
+          if (key === 'keywords' && Array.isArray(value)) {
+            // Store AI-generated keywords
+            result.keywords = value;
+          } else if (key !== 'keywords') {
             result[key as keyof EnrichResult] = value as any;
           }
         }
@@ -625,22 +653,10 @@ export default async function handler(
         result.website = aiResults.website;
       }
       
-      // If AI method, try to extract keywords from AI-found website, then return
+      // If AI method, use AI-generated keywords only
       if (method === 'ai') {
-        // If AI found a website, try to extract keywords from it
-        if (result.website && result.website !== 'Not found') {
-          try {
-            const websiteHtml = await fetchPageContent(result.website);
-            if (websiteHtml) {
-              result.keywords = extractKeywords(websiteHtml);
-            }
-          } catch (error) {
-            console.log('Could not extract keywords from AI-found website');
-          }
-        }
-        
         result.status = 'Success (AI-powered)';
-        console.log('AI method: Returning pure AI results');
+        console.log('AI method: Returning pure AI results with AI-generated keywords');
         return res.status(200).json(result);
       }
       
@@ -733,7 +749,18 @@ export default async function handler(
     }
 
     // Extract keywords from website
-    result.keywords = extractKeywords(html);
+    const extractedKeywords = extractKeywords(html);
+    
+    // Handle keywords based on method
+    if (method === 'hybrid' && result.keywords && result.keywords.length > 0) {
+      // Hybrid: Combine AI-generated and extracted keywords, remove duplicates
+      const aiKeywords = result.keywords;
+      const combined = [...aiKeywords, ...extractedKeywords];
+      result.keywords = Array.from(new Set(combined)).slice(0, 20); // Keep unique, max 20
+    } else {
+      // Extraction method: Use extracted keywords only
+      result.keywords = extractedKeywords;
+    }
 
     // Set status based on method used
     if (method === 'hybrid') {
