@@ -54,7 +54,9 @@ function extractEmailAndPhone(html: string): { email: string; phone: string } {
   $('a[href^="mailto:"]').each((_, element) => {
     const href = $(element).attr('href');
     if (href && result.email === 'Not found') {
-      const email = href.replace('mailto:', '').split('?')[0].split('&')[0].trim();
+      // Decode URL-encoded characters (e.g., %40 -> @, %20 -> space)
+      const decodedHref = decodeURIComponent(href);
+      const email = decodedHref.replace('mailto:', '').split('?')[0].split('&')[0].trim();
       // Validate email format
       if (email.match(/^[^\s@]+@[^\s@]+\.[^\s@]+$/)) {
         result.email = email;
@@ -104,7 +106,9 @@ function extractEmailAndPhone(html: string): { email: string; phone: string } {
   $('a[href^="tel:"]').each((_, element) => {
     const href = $(element).attr('href');
     if (href && result.phone === 'Not found') {
-      const phone = href.replace('tel:', '').replace(/\s+/g, ' ').trim();
+      // Decode URL-encoded characters (e.g., %20 -> space)
+      const decodedHref = decodeURIComponent(href);
+      const phone = decodedHref.replace('tel:', '').replace(/\s+/g, ' ').trim();
       result.phone = phone;
       return false; // break
     }
