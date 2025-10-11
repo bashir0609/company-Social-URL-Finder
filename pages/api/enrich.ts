@@ -149,24 +149,53 @@ function extractKeywords(html: string): string[] {
   const $ = cheerio.load(html);
   
   // Remove script, style, and other non-content tags
-  $('script, style, nav, header, footer').remove();
+  $('script, style, nav, header, footer, iframe, noscript').remove();
   
-  // Get text content
-  const text = $('body').text()
+  // Extract text from important sections with weights
+  const titleText = $('title').text() || '';
+  const metaDescription = $('meta[name="description"]').attr('content') || '';
+  const metaKeywords = $('meta[name="keywords"]').attr('content') || '';
+  const h1Text = $('h1').text() || '';
+  const h2Text = $('h2').text() || '';
+  const mainText = $('main, article, .content, #content').text() || $('body').text();
+  
+  // Combine with weights (title and meta tags are more important)
+  const weightedText = 
+    titleText.repeat(5) + ' ' +
+    metaDescription.repeat(3) + ' ' +
+    metaKeywords.repeat(3) + ' ' +
+    h1Text.repeat(4) + ' ' +
+    h2Text.repeat(2) + ' ' +
+    mainText;
+  
+  const text = weightedText
     .toLowerCase()
     .replace(/[^\w\s]/g, ' ')
     .replace(/\s+/g, ' ')
     .trim();
   
-  // Common stop words to filter out
-  const stopWords = new Set(['the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'from', 'as', 'is', 'was', 'are', 'were', 'been', 'be', 'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'should', 'could', 'may', 'might', 'must', 'can', 'this', 'that', 'these', 'those', 'i', 'you', 'he', 'she', 'it', 'we', 'they', 'what', 'which', 'who', 'when', 'where', 'why', 'how', 'all', 'each', 'every', 'both', 'few', 'more', 'most', 'other', 'some', 'such', 'no', 'nor', 'not', 'only', 'own', 'same', 'so', 'than', 'too', 'very', 's', 't', 'just', 'don', 'now', 'our', 'your', 'their']);
+  // Expanded stop words list
+  const stopWords = new Set([
+    'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by', 'from', 'as', 'is', 'was', 'are', 'were', 'been', 'be', 'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would', 'should', 'could', 'may', 'might', 'must', 'can', 'this', 'that', 'these', 'those', 'i', 'you', 'he', 'she', 'it', 'we', 'they', 'what', 'which', 'who', 'when', 'where', 'why', 'how', 'all', 'each', 'every', 'both', 'few', 'more', 'most', 'other', 'some', 'such', 'no', 'nor', 'not', 'only', 'own', 'same', 'so', 'than', 'too', 'very', 's', 't', 'just', 'don', 'now', 'our', 'your', 'their', 'about', 'into', 'through', 'during', 'before', 'after', 'above', 'below', 'up', 'down', 'out', 'off', 'over', 'under', 'again', 'further', 'then', 'once', 'here', 'there', 'also', 'any', 'because', 'until', 'while', 'get', 'make', 'go', 'know', 'take', 'see', 'come', 'think', 'look', 'want', 'give', 'use', 'find', 'tell', 'ask', 'work', 'seem', 'feel', 'try', 'leave', 'call', 'back', 'read', 'need', 'let', 'put', 'mean', 'keep', 'begin', 'show', 'hear', 'play', 'run', 'move', 'like', 'live', 'believe', 'hold', 'bring', 'happen', 'write', 'provide', 'sit', 'stand', 'lose', 'pay', 'meet', 'include', 'continue', 'set', 'learn', 'change', 'lead', 'understand', 'watch', 'follow', 'stop', 'create', 'speak', 'allow', 'add', 'spend', 'grow', 'open', 'walk', 'win', 'offer', 'remember', 'love', 'consider', 'appear', 'buy', 'wait', 'serve', 'die', 'send', 'expect', 'build', 'stay', 'fall', 'cut', 'reach', 'kill', 'remain', 'suggest', 'raise', 'pass', 'sell', 'require', 'report', 'decide', 'pull', 'home', 'page', 'site', 'website', 'click', 'here', 'more', 'view', 'privacy', 'policy', 'terms', 'conditions', 'copyright', 'rights', 'reserved', 'contact', 'help', 'support', 'login', 'sign', 'register', 'account', 'user', 'menu', 'search', 'skip', 'content', 'main', 'navigation', 'footer', 'header'
+  ]);
   
   // Extract words and count frequency
-  const words = text.split(' ').filter(word => 
-    word.length > 3 && 
-    !stopWords.has(word) &&
-    !/^\d+$/.test(word) // exclude pure numbers
-  );
+  const words = text.split(' ').filter(word => {
+    // Filter criteria
+    if (word.length < 4) return false; // min 4 characters
+    if (word.length > 20) return false; // max 20 characters (likely technical)
+    if (stopWords.has(word)) return false;
+    if (/^\d+$/.test(word)) return false; // pure numbers
+    if (/^[a-z]\d+/.test(word)) return false; // technical codes like "a1", "x2"
+    if (word.includes('_')) return false; // technical variables
+    if (/\d{3,}/.test(word)) return false; // contains 3+ consecutive digits
+    
+    // Must contain mostly letters
+    const letterCount = (word.match(/[a-z]/g) || []).length;
+    if (letterCount < word.length * 0.7) return false;
+    
+    return true;
+  });
   
   // Count word frequency
   const wordCount: Record<string, number> = {};
@@ -176,6 +205,7 @@ function extractKeywords(html: string): string[] {
   
   // Sort by frequency and get top 15-20
   const sortedWords = Object.entries(wordCount)
+    .filter(([word, count]) => count >= 2) // Must appear at least twice
     .sort((a, b) => b[1] - a[1])
     .slice(0, 20)
     .map(([word]) => word);
