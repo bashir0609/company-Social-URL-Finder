@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Head from 'next/head';
-import { Search, Upload, Download, Linkedin, Facebook, Twitter, Instagram, Youtube, Globe, Mail, Loader2 } from 'lucide-react';
+import { Search, Upload, Download, Linkedin, Facebook, Twitter, Instagram, Youtube, Globe, Mail, Loader2, Copy, Check, Clock, FileDown } from 'lucide-react';
 import axios from 'axios';
 import Papa from 'papaparse';
 import * as XLSX from 'xlsx';
@@ -25,27 +25,98 @@ export default function Home() {
   const [companyInput, setCompanyInput] = useState('');
   const [apiKey, setApiKey] = useState('');
   const [showApiKey, setShowApiKey] = useState(false);
+  const [method, setMethod] = useState<'extraction' | 'ai'>('extraction');
+  const [customPrompt, setCustomPrompt] = useState('');
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<EnrichResult | null>(null);
   const [bulkResults, setBulkResults] = useState<EnrichResult[]>([]);
   const [bulkFile, setBulkFile] = useState<File | null>(null);
   const [bulkProgress, setBulkProgress] = useState(0);
+  const [copiedUrl, setCopiedUrl] = useState<string | null>(null);
+  const [recentSearches, setRecentSearches] = useState<string[]>([]);
+  const [showRecentSearches, setShowRecentSearches] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string>('');
+
+  // Load recent searches from localStorage
+  useEffect(() => {
+    const saved = localStorage.getItem('recentSearches');
+    if (saved) {
+      setRecentSearches(JSON.parse(saved));
+    }
+  }, []);
+
+  // Save to recent searches
+  const addToRecentSearches = (company: string) => {
+    const updated = [company, ...recentSearches.filter(s => s !== company)].slice(0, 10);
+    setRecentSearches(updated);
+    localStorage.setItem('recentSearches', JSON.stringify(updated));
+  };
+
+  // Copy to clipboard
+  const copyToClipboard = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedUrl(text);
+      setTimeout(() => setCopiedUrl(null), 2000);
+    } catch (err) {
+      console.error('Failed to copy:', err);
+    }
+  };
+
+  // Export to CSV
+  const exportToCSV = (data: EnrichResult[]) => {
+    const csv = Papa.unparse(data);
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `social-urls-${new Date().toISOString().split('T')[0]}.csv`;
+    link.click();
+  };
 
   const handleSingleSearch = async () => {
     if (!companyInput.trim()) return;
 
     setLoading(true);
     setResult(null);
+    setErrorMessage('');
+
+    // Add to recent searches
+    addToRecentSearches(companyInput);
 
     try {
       const response = await axios.post<EnrichResult>('/api/enrich', {
         company: companyInput,
-        method: 'extraction',
+        method: method,
         apiKey: apiKey || undefined,
+        customPrompt: customPrompt || undefined,
       });
       setResult(response.data);
-    } catch (error) {
+      
+      // Better error messages based on status
+      if (response.data.status.includes('Failed')) {
+        if (response.data.status.includes('Could not find website')) {
+          setErrorMessage('❌ Website not found. Please check the company name or try entering the website URL directly.');
+        } else if (response.data.status.includes('API key')) {
+          setErrorMessage('🔑 AI method requires an API key. Please enter your OpenRouter API key above or switch to Extraction method.');
+        } else {
+          setErrorMessage('⚠️ Search completed with some issues. Check the results below.');
+        }
+      }
+    } catch (error: any) {
       console.error('Error:', error);
+      
+      // Detailed error messages
+      if (error.response?.status === 429) {
+        setErrorMessage('⏱️ Rate limit exceeded. Please wait a moment and try again.');
+      } else if (error.response?.status === 500) {
+        setErrorMessage('🔧 Server error. The website might be temporarily unavailable.');
+      } else if (error.code === 'ECONNABORTED') {
+        setErrorMessage('⏰ Request timed out. The website took too long to respond.');
+      } else {
+        setErrorMessage('❌ An error occurred. Please try again or contact support.');
+      }
+      
       setResult({
         company_name: companyInput,
         website: '',
@@ -124,8 +195,9 @@ export default function Home() {
       try {
         const response = await axios.post<EnrichResult>('/api/enrich', {
           company: companies[i],
-          method: 'extraction',
+          method: method,
           apiKey: apiKey || undefined,
+          customPrompt: customPrompt || undefined,
         });
         results.push(response.data);
       } catch (error) {
@@ -208,6 +280,67 @@ export default function Home() {
             </p>
           </div>
 
+          {/* Method Selection */}
+          <div className="bg-white rounded-lg shadow-md p-4 mb-6 max-w-2xl mx-auto">
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Search Method
+              </label>
+              <div className="flex gap-4">
+                <label className="flex items-center cursor-pointer">
+                  <input
+                    type="radio"
+                    value="extraction"
+                    checked={method === 'extraction'}
+                    onChange={(e) => setMethod(e.target.value as 'extraction' | 'ai')}
+                    className="mr-2"
+                  />
+                  <span className="text-sm">
+                    <strong>Extraction</strong> - Fast web scraping (No API key needed)
+                  </span>
+                </label>
+                <label className="flex items-center cursor-pointer">
+                  <input
+                    type="radio"
+                    value="ai"
+                    checked={method === 'ai'}
+                    onChange={(e) => setMethod(e.target.value as 'extraction' | 'ai')}
+                    className="mr-2"
+                  />
+                  <span className="text-sm">
+                    <strong>AI</strong> - Enhanced search (Requires API key)
+                  </span>
+                </label>
+              </div>
+            </div>
+
+            {/* Advanced Settings */}
+            <button
+              onClick={() => setShowAdvanced(!showAdvanced)}
+              className="text-sm text-primary hover:underline"
+            >
+              {showAdvanced ? '▼' : '▶'} Advanced Settings
+            </button>
+
+            {showAdvanced && (
+              <div className="mt-4 p-4 bg-gray-50 rounded-lg">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Custom AI Prompt (Optional)
+                </label>
+                <textarea
+                  value={customPrompt}
+                  onChange={(e) => setCustomPrompt(e.target.value)}
+                  placeholder="Enter custom instructions for AI search..."
+                  rows={3}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent text-sm"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Customize how AI searches for social profiles. Leave empty for default behavior.
+                </p>
+              </div>
+            )}
+          </div>
+
           {/* Tabs */}
           <div className="flex justify-center mb-6">
             <div className="inline-flex rounded-lg border border-gray-200 bg-white p-1">
@@ -239,12 +372,39 @@ export default function Home() {
           {/* Single Company Tab */}
           {activeTab === 'single' && (
             <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
+              {/* Recent Searches */}
+              {recentSearches.length > 0 && (
+                <div className="mb-4">
+                  <button
+                    onClick={() => setShowRecentSearches(!showRecentSearches)}
+                    className="flex items-center gap-2 text-sm text-gray-600 hover:text-gray-900"
+                  >
+                    <Clock className="w-4 h-4" />
+                    Recent Searches ({recentSearches.length})
+                  </button>
+                  {showRecentSearches && (
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {recentSearches.map((search, index) => (
+                        <button
+                          key={index}
+                          onClick={() => setCompanyInput(search)}
+                          className="px-3 py-1 bg-gray-100 hover:bg-gray-200 rounded-full text-sm text-gray-700"
+                        >
+                          {search}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
               <div className="flex gap-4 mb-6">
                 <input
                   type="text"
                   value={companyInput}
                   onChange={(e) => setCompanyInput(e.target.value)}
                   onKeyPress={(e) => e.key === 'Enter' && handleSingleSearch()}
+                  onFocus={() => setShowRecentSearches(true)}
                   placeholder="Enter company name or website URL (e.g., Microsoft or microsoft.com)"
                   className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
                 />
@@ -266,6 +426,29 @@ export default function Home() {
                   )}
                 </button>
               </div>
+
+              {/* Error Message */}
+              {errorMessage && (
+                <div className="mb-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                  <p className="text-sm text-yellow-800">{errorMessage}</p>
+                </div>
+              )}
+
+              {/* Loading Skeleton */}
+              {loading && !result && (
+                <div className="mt-6 animate-pulse">
+                  <div className="h-16 bg-gray-200 rounded-lg mb-4"></div>
+                  <div className="grid md:grid-cols-2 gap-4 mb-4">
+                    <div className="h-24 bg-gray-200 rounded-lg"></div>
+                    <div className="h-24 bg-gray-200 rounded-lg"></div>
+                  </div>
+                  <div className="grid md:grid-cols-2 gap-3">
+                    {[1, 2, 3, 4, 5, 6].map((i) => (
+                      <div key={i} className="h-16 bg-gray-200 rounded-lg"></div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Results */}
               {result && (
@@ -328,24 +511,42 @@ export default function Home() {
                         { key: 'twitter', icon: Twitter, label: 'Twitter/X', color: 'text-sky-500' },
                         { key: 'instagram', icon: Instagram, label: 'Instagram', color: 'text-pink-600' },
                         { key: 'youtube', icon: Youtube, label: 'YouTube', color: 'text-red-600' },
-                      ].map(({ key, icon: Icon, label, color }) => (
-                        <div key={key} className="flex items-center gap-2 p-3 bg-white border rounded-lg">
-                          <Icon className={`w-5 h-5 ${color}`} />
-                          <span className="font-medium">{label}:</span>
-                          {result[key as keyof EnrichResult] !== 'Not found' ? (
-                            <a
-                              href={result[key as keyof EnrichResult] as string}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-primary hover:underline text-sm truncate flex-1"
-                            >
-                              View Profile
-                            </a>
-                          ) : (
-                            <span className="text-gray-400 text-sm">Not found</span>
-                          )}
-                        </div>
-                      ))}
+                      ].map(({ key, icon: Icon, label, color }) => {
+                        const url = result[key as keyof EnrichResult] as string;
+                        const isFound = url !== 'Not found';
+                        return (
+                          <div key={key} className="flex items-center gap-2 p-3 bg-white border rounded-lg">
+                            <Icon className={`w-5 h-5 ${color}`} />
+                            <span className="font-medium text-sm">{label}:</span>
+                            {isFound ? (
+                              <>
+                                <a
+                                  href={url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-primary hover:underline text-xs truncate flex-1"
+                                  title={url}
+                                >
+                                  {url}
+                                </a>
+                                <button
+                                  onClick={() => copyToClipboard(url)}
+                                  className="p-1 hover:bg-gray-100 rounded transition-colors"
+                                  title="Copy to clipboard"
+                                >
+                                  {copiedUrl === url ? (
+                                    <Check className="w-4 h-4 text-green-600" />
+                                  ) : (
+                                    <Copy className="w-4 h-4 text-gray-600" />
+                                  )}
+                                </button>
+                              </>
+                            ) : (
+                              <span className="text-gray-400 text-sm">Not found</span>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 </div>
@@ -406,13 +607,22 @@ export default function Home() {
                     <h3 className="text-lg font-semibold">
                       Results ({bulkResults.length} companies)
                     </h3>
-                    <button
-                      onClick={downloadResults}
-                      className="px-4 py-2 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 flex items-center gap-2"
-                    >
-                      <Download className="w-4 h-4" />
-                      Download Excel
-                    </button>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => exportToCSV(bulkResults)}
+                        className="px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 flex items-center gap-2"
+                      >
+                        <FileDown className="w-4 h-4" />
+                        Download CSV
+                      </button>
+                      <button
+                        onClick={downloadResults}
+                        className="px-4 py-2 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 flex items-center gap-2"
+                      >
+                        <Download className="w-4 h-4" />
+                        Download Excel
+                      </button>
+                    </div>
                   </div>
                   
                   <div className="overflow-x-auto">
