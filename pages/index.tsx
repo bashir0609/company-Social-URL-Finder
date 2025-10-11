@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import Head from 'next/head';
-import { Search, Upload, Download, Linkedin, Facebook, Twitter, Instagram, Youtube, Globe, Mail, Loader2, Copy, Check, Clock, FileDown } from 'lucide-react';
+import { Search, Upload, Download, Linkedin, Facebook, Twitter, Instagram, Youtube, Globe, Mail, Loader2, Copy, Check, Clock, FileDown, Moon, Sun, RefreshCw } from 'lucide-react';
 import axios from 'axios';
 import Papa from 'papaparse';
 import * as XLSX from 'xlsx';
@@ -37,14 +37,64 @@ export default function Home() {
   const [recentSearches, setRecentSearches] = useState<string[]>([]);
   const [showRecentSearches, setShowRecentSearches] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string>('');
+  const [darkMode, setDarkMode] = useState(false);
+  const [searchProgress, setSearchProgress] = useState<string>('');
+  const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>(['linkedin', 'facebook', 'twitter', 'instagram', 'youtube', 'tiktok', 'pinterest', 'github']);
+  const [showPlatformFilter, setShowPlatformFilter] = useState(false);
 
-  // Load recent searches from localStorage
+  // Load recent searches and dark mode from localStorage
   useEffect(() => {
     const saved = localStorage.getItem('recentSearches');
     if (saved) {
       setRecentSearches(JSON.parse(saved));
     }
+    
+    const savedDarkMode = localStorage.getItem('darkMode');
+    if (savedDarkMode === 'true') {
+      setDarkMode(true);
+      document.documentElement.classList.add('dark');
+    }
   }, []);
+
+  // Apply dark mode
+  useEffect(() => {
+    if (darkMode) {
+      document.documentElement.classList.add('dark');
+      localStorage.setItem('darkMode', 'true');
+    } else {
+      document.documentElement.classList.remove('dark');
+      localStorage.setItem('darkMode', 'false');
+    }
+  }, [darkMode]);
+
+  // Keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Ctrl+K or Cmd+K - Focus search
+      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+        e.preventDefault();
+        const searchInput = document.querySelector('input[type="text"]') as HTMLInputElement;
+        if (searchInput) searchInput.focus();
+      }
+      
+      // Ctrl+Enter or Cmd+Enter - Submit search
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+        e.preventDefault();
+        if (activeTab === 'single' && companyInput.trim()) {
+          handleSingleSearch();
+        }
+      }
+      
+      // Escape - Clear results
+      if (e.key === 'Escape') {
+        setResult(null);
+        setErrorMessage('');
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [activeTab, companyInput]);
 
   // Save to recent searches
   const addToRecentSearches = (company: string) => {
@@ -74,24 +124,41 @@ export default function Home() {
     link.click();
   };
 
+  // Toggle platform selection
+  const togglePlatform = (platform: string) => {
+    if (selectedPlatforms.includes(platform)) {
+      setSelectedPlatforms(selectedPlatforms.filter(p => p !== platform));
+    } else {
+      setSelectedPlatforms([...selectedPlatforms, platform]);
+    }
+  };
+
   const handleSingleSearch = async () => {
     if (!companyInput.trim()) return;
 
     setLoading(true);
     setResult(null);
     setErrorMessage('');
+    setSearchProgress('🔍 Finding website...');
 
     // Add to recent searches
     addToRecentSearches(companyInput);
 
     try {
+      // Simulate progress updates
+      setTimeout(() => setSearchProgress('🌐 Fetching website content...'), 500);
+      setTimeout(() => setSearchProgress('🔗 Extracting social links...'), 1500);
+      setTimeout(() => setSearchProgress('✅ Processing results...'), 2500);
+
       const response = await axios.post<EnrichResult>('/api/enrich', {
         company: companyInput,
         method: method,
         apiKey: apiKey || undefined,
         customPrompt: customPrompt || undefined,
+        platforms: selectedPlatforms,
       });
       setResult(response.data);
+      setSearchProgress('');
       
       // Better error messages based on status
       if (response.data.status.includes('Failed')) {
@@ -238,16 +305,28 @@ export default function Home() {
         <link rel="icon" href="/favicon.ico" />
       </Head>
 
-      <main className="min-h-screen bg-gradient-to-b from-blue-50 to-white">
+      <main className={`min-h-screen transition-colors ${darkMode ? 'bg-gray-900' : 'bg-gradient-to-b from-blue-50 to-white'}`}>
         <div className="container mx-auto px-4 py-8 max-w-6xl">
-          {/* Header */}
-          <div className="text-center mb-8">
-            <h1 className="text-4xl font-bold text-primary mb-2">
-              🔍 Company Social URL Finder
-            </h1>
-            <p className="text-gray-600">
-              Find official social media profiles and contact pages for any company
-            </p>
+          {/* Header with Dark Mode Toggle */}
+          <div className="flex justify-between items-start mb-8">
+            <div className="flex-1 text-center">
+              <h1 className={`text-4xl font-bold mb-2 ${darkMode ? 'text-blue-400' : 'text-primary'}`}>
+                🔍 Company Social URL Finder
+              </h1>
+              <p className={darkMode ? 'text-gray-300' : 'text-gray-600'}>
+                Find official social media profiles and contact pages for any company
+              </p>
+              <div className="mt-2 text-xs text-gray-500">
+                ⌨️ Shortcuts: <kbd className="px-2 py-1 bg-gray-200 dark:bg-gray-700 rounded">Ctrl+K</kbd> Focus | <kbd className="px-2 py-1 bg-gray-200 dark:bg-gray-700 rounded">Ctrl+Enter</kbd> Search | <kbd className="px-2 py-1 bg-gray-200 dark:bg-gray-700 rounded">Esc</kbd> Clear
+              </div>
+            </div>
+            <button
+              onClick={() => setDarkMode(!darkMode)}
+              className={`p-3 rounded-lg transition-colors ${darkMode ? 'bg-gray-800 text-yellow-400 hover:bg-gray-700' : 'bg-white text-gray-700 hover:bg-gray-100'} shadow-md`}
+              title="Toggle dark mode"
+            >
+              {darkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+            </button>
           </div>
 
           {/* API Key Configuration */}
@@ -323,20 +402,56 @@ export default function Home() {
             </button>
 
             {showAdvanced && (
-              <div className="mt-4 p-4 bg-gray-50 rounded-lg">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Custom AI Prompt (Optional)
-                </label>
-                <textarea
-                  value={customPrompt}
-                  onChange={(e) => setCustomPrompt(e.target.value)}
-                  placeholder="Enter custom instructions for AI search..."
-                  rows={3}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent text-sm"
-                />
-                <p className="text-xs text-gray-500 mt-1">
-                  Customize how AI searches for social profiles. Leave empty for default behavior.
-                </p>
+              <div className="mt-4 space-y-4">
+                <div className="p-4 bg-gray-50 rounded-lg">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Custom AI Prompt (Optional)
+                  </label>
+                  <textarea
+                    value={customPrompt}
+                    onChange={(e) => setCustomPrompt(e.target.value)}
+                    placeholder="Enter custom instructions for AI search..."
+                    rows={3}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent text-sm"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Customize how AI searches for social profiles. Leave empty for default behavior.
+                  </p>
+                </div>
+
+                {/* Platform Filter */}
+                <div className="p-4 bg-gray-50 rounded-lg">
+                  <label className="block text-sm font-medium text-gray-700 mb-3">
+                    Select Platforms to Search
+                  </label>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    {[
+                      { key: 'linkedin', label: 'LinkedIn', icon: '💼' },
+                      { key: 'facebook', label: 'Facebook', icon: '📘' },
+                      { key: 'twitter', label: 'Twitter/X', icon: '🐦' },
+                      { key: 'instagram', label: 'Instagram', icon: '📸' },
+                      { key: 'youtube', label: 'YouTube', icon: '📺' },
+                      { key: 'tiktok', label: 'TikTok', icon: '🎵' },
+                      { key: 'pinterest', label: 'Pinterest', icon: '📌' },
+                      { key: 'github', label: 'GitHub', icon: '💻' },
+                    ].map(({ key, label, icon }) => (
+                      <label key={key} className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={selectedPlatforms.includes(key)}
+                          onChange={() => togglePlatform(key)}
+                          className="w-4 h-4 text-primary"
+                        />
+                        <span className="text-sm">
+                          {icon} {label}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                  <p className="text-xs text-gray-500 mt-2">
+                    Uncheck platforms you don't want to search. Fewer platforms = faster results.
+                  </p>
+                </div>
               </div>
             )}
           </div>
@@ -434,6 +549,16 @@ export default function Home() {
                 </div>
               )}
 
+              {/* Progress Indicator */}
+              {loading && searchProgress && (
+                <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                  <div className="flex items-center gap-3">
+                    <Loader2 className="w-5 h-5 animate-spin text-blue-600" />
+                    <p className="text-sm text-blue-800 font-medium">{searchProgress}</p>
+                  </div>
+                </div>
+              )}
+
               {/* Loading Skeleton */}
               {loading && !result && (
                 <div className="mt-6 animate-pulse">
@@ -453,7 +578,7 @@ export default function Home() {
               {/* Results */}
               {result && (
                 <div className="mt-6">
-                  <div className={`p-4 rounded-lg mb-4 ${
+                  <div className={`p-4 rounded-lg mb-4 flex justify-between items-center ${
                     result.status === 'Success' 
                       ? 'bg-green-50 border border-green-200' 
                       : 'bg-red-50 border border-red-200'
@@ -461,6 +586,16 @@ export default function Home() {
                     <p className="font-medium">
                       Status: {result.status}
                     </p>
+                    {result.status !== 'Success' && (
+                      <button
+                        onClick={handleSingleSearch}
+                        disabled={loading}
+                        className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:bg-gray-400 flex items-center gap-2"
+                      >
+                        <RefreshCw className="w-4 h-4" />
+                        Retry Search
+                      </button>
+                    )}
                   </div>
 
                   <div className="grid md:grid-cols-2 gap-4">
