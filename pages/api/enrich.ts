@@ -50,60 +50,179 @@ function extractEmailAndPhone(html: string): { email: string; phone: string } {
   const result = { email: 'Not found', phone: 'Not found' };
   
   // Extract email
-  // Look for mailto links
+  // 1. Look for mailto links
   $('a[href^="mailto:"]').each((_, element) => {
     const href = $(element).attr('href');
     if (href && result.email === 'Not found') {
-      const email = href.replace('mailto:', '').split('?')[0].trim();
+      const email = href.replace('mailto:', '').split('?')[0].split('&')[0].trim();
       // Validate email format
       if (email.match(/^[^\s@]+@[^\s@]+\.[^\s@]+$/)) {
         result.email = email;
+        return false; // break
       }
     }
   });
   
-  // If no mailto found, search in text content
+  // 2. Search in HTML content (more targeted)
   if (result.email === 'Not found') {
-    const text = $('body').text();
+    // Look in specific areas first (footer, contact sections)
+    const targetAreas = $('footer, .contact, .footer, #contact, #footer, [class*="contact"], [class*="footer"]').text();
     const emailRegex = /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b/g;
-    const emails = text.match(emailRegex);
+    let emails = targetAreas.match(emailRegex);
+    
+    // If not found in targeted areas, search entire body
+    if (!emails || emails.length === 0) {
+      const bodyText = $('body').text();
+      emails = bodyText.match(emailRegex);
+    }
+    
     if (emails && emails.length > 0) {
-      // Filter out common non-contact emails
-      const validEmails = emails.filter(email => 
-        !email.includes('example.com') && 
-        !email.includes('test.com') &&
-        !email.includes('sentry.io') &&
-        !email.includes('wixpress.com')
+      // Filter out common non-contact emails and prioritize contact-related emails
+      const validEmails = emails.filter((email: string) => 
+        !email.toLowerCase().includes('example.com') && 
+        !email.toLowerCase().includes('test.com') &&
+        !email.toLowerCase().includes('sentry.io') &&
+        !email.toLowerCase().includes('wixpress.com') &&
+        !email.toLowerCase().includes('noreply') &&
+        !email.toLowerCase().includes('no-reply')
       );
-      if (validEmails.length > 0) {
-        result.email = validEmails[0];
-      }
+      
+      // Prioritize emails with contact-related prefixes
+      const contactEmail = validEmails.find((email: string) => 
+        email.toLowerCase().includes('contact') ||
+        email.toLowerCase().includes('info') ||
+        email.toLowerCase().includes('hello') ||
+        email.toLowerCase().includes('support')
+      );
+      
+      result.email = contactEmail || validEmails[0];
     }
   }
   
   // Extract phone number
-  // Look for tel links
+  // 1. Look for tel links
   $('a[href^="tel:"]').each((_, element) => {
     const href = $(element).attr('href');
     if (href && result.phone === 'Not found') {
-      const phone = href.replace('tel:', '').trim();
+      const phone = href.replace('tel:', '').replace(/\s+/g, ' ').trim();
       result.phone = phone;
+      return false; // break
     }
   });
   
-  // If no tel link found, search in text content
+  // 2. Search in HTML content (more targeted)
   if (result.phone === 'Not found') {
-    const text = $('body').text();
-    // Match various phone formats
-    const phoneRegex = /(\+?\d{1,3}[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}|\+?\d{1,3}[-.\s]?\d{2,4}[-.\s]?\d{3,4}[-.\s]?\d{3,4}/g;
-    const phones = text.match(phoneRegex);
+    // Look in specific areas first
+    const targetAreas = $('footer, .contact, .footer, #contact, #footer, [class*="contact"], [class*="footer"], [class*="phone"]').text();
+    // Improved phone regex to match more formats
+    const phoneRegex = /(\+?\d{1,4}[\s.-]?)?\(?\d{2,4}\)?[\s.-]?\d{2,4}[\s.-]?\d{2,4}[\s.-]?\d{0,4}/g;
+    let phones = targetAreas.match(phoneRegex);
+    
+    // If not found in targeted areas, search entire body
+    if (!phones || phones.length === 0) {
+      const bodyText = $('body').text();
+      phones = bodyText.match(phoneRegex);
+    }
+    
     if (phones && phones.length > 0) {
-      // Get the first valid-looking phone number
-      result.phone = phones[0].trim();
+      // Filter to get valid phone numbers (at least 10 digits)
+      const validPhones = phones.filter((phone: string) => {
+        const digitsOnly = phone.replace(/\D/g, '');
+        return digitsOnly.length >= 10 && digitsOnly.length <= 15;
+      });
+      
+      if (validPhones.length > 0) {
+        result.phone = validPhones[0].trim();
+      }
     }
   }
   
   return result;
+}
+
+async function aiSearchSocialProfiles(
+  company: string, 
+  apiKey: string, 
+  model: string = 'openai/gpt-3.5-turbo',
+  customPrompt?: string
+): Promise<Partial<EnrichResult>> {
+  const defaultPrompt = `Find all official social media profiles for the company "${company}". 
+Return ONLY the direct URLs in this exact JSON format:
+{
+  "website": "company website URL",
+  "linkedin": "LinkedIn company page URL",
+  "facebook": "Facebook page URL", 
+  "twitter": "Twitter/X profile URL",
+  "instagram": "Instagram profile URL",
+  "youtube": "YouTube channel URL",
+  "tiktok": "TikTok profile URL",
+  "email": "contact email",
+  "phone": "contact phone"
+}
+If you cannot find a specific profile, use "Not found" as the value.
+Return ONLY valid JSON, no additional text.`;
+
+  const prompt = customPrompt || defaultPrompt;
+
+  try {
+    const response = await axios.post(
+      'https://openrouter.ai/api/v1/chat/completions',
+      {
+        model: model,
+        messages: [
+          {
+            role: 'user',
+            content: prompt.replace('[company name]', company)
+          }
+        ],
+        temperature: 0.3,
+        max_tokens: 1000,
+      },
+      {
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': 'application/json',
+          'HTTP-Referer': process.env.SITE_URL || 'http://localhost:3000',
+          'X-Title': 'Company Social Finder',
+        },
+        timeout: 30000,
+      }
+    );
+
+    const aiResponse = response.data.choices[0]?.message?.content || '{}';
+    
+    // Try to extract JSON from the response
+    let jsonMatch = aiResponse.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) {
+      console.log('No JSON found in AI response:', aiResponse);
+      return {};
+    }
+
+    const parsedData = JSON.parse(jsonMatch[0]);
+    
+    // Validate and clean the URLs
+    const cleanedData: Partial<EnrichResult> = {};
+    const urlFields = ['website', 'linkedin', 'facebook', 'twitter', 'instagram', 'youtube', 'tiktok', 'contact_page'];
+    
+    for (const field of urlFields) {
+      if (parsedData[field] && parsedData[field] !== 'Not found' && parsedData[field].startsWith('http')) {
+        cleanedData[field as keyof EnrichResult] = parsedData[field];
+      }
+    }
+    
+    // Add email and phone if found
+    if (parsedData.email && parsedData.email !== 'Not found') {
+      cleanedData.email = parsedData.email;
+    }
+    if (parsedData.phone && parsedData.phone !== 'Not found') {
+      cleanedData.phone = parsedData.phone;
+    }
+
+    return cleanedData;
+  } catch (error: any) {
+    console.error('AI search error:', error.response?.data || error.message);
+    return {};
+  }
 }
 
 function extractSocialLinks(html: string, baseUrl: string): Record<string, string> {
@@ -286,30 +405,10 @@ export default async function handler(
     });
   }
 
-  const { company, method = 'extraction', apiKey, customPrompt } = req.body;
+  const { company, method = 'extraction', apiKey, customPrompt, model } = req.body;
 
   // Use API key from request body or environment variable
   const effectiveApiKey = apiKey || process.env.OPENROUTER_API_KEY;
-
-  // Validate AI method requirements
-  if (method === 'ai' && !effectiveApiKey) {
-    return res.status(400).json({
-      company_name: company || '',
-      website: '',
-      contact_page: 'Not found',
-      email: 'Not found',
-      phone: 'Not found',
-      linkedin: 'Not found',
-      facebook: 'Not found',
-      twitter: 'Not found',
-      instagram: 'Not found',
-      youtube: 'Not found',
-      tiktok: 'Not found',
-      pinterest: 'Not found',
-      github: 'Not found',
-      status: 'AI method requires API key',
-    });
-  }
 
   if (!company) {
     return res.status(400).json({
@@ -348,6 +447,44 @@ export default async function handler(
   };
 
   try {
+    // AI METHOD: Use OpenRouter API for intelligent search
+    if (method === 'ai' && effectiveApiKey) {
+      console.log(`Using AI method with model: ${model || 'default'}`);
+      
+      const aiResults = await aiSearchSocialProfiles(
+        company,
+        effectiveApiKey,
+        model,
+        customPrompt
+      );
+      
+      // Merge AI results into result object
+      for (const [key, value] of Object.entries(aiResults)) {
+        if (value && value !== 'Not found') {
+          result[key as keyof EnrichResult] = value as string;
+        }
+      }
+      
+      // If AI found website, use it
+      if (aiResults.website) {
+        result.website = aiResults.website;
+      }
+      
+      // If AI didn't find everything, fall back to extraction for missing fields
+      const hasAllData = result.linkedin !== 'Not found' && 
+                        result.facebook !== 'Not found' && 
+                        result.twitter !== 'Not found';
+      
+      if (!hasAllData) {
+        console.log('AI search incomplete, falling back to extraction for missing fields');
+        // Continue to extraction method below
+      } else {
+        result.status = 'Success (AI-powered)';
+        return res.status(200).json(result);
+      }
+    }
+    
+    // EXTRACTION METHOD: Traditional web scraping
     // Determine if input is URL or company name
     const isUrl = /\.(com|io|net|org|co|ai|dev|app|tech)\b/i.test(company);
     
@@ -373,17 +510,19 @@ export default async function handler(
       return res.status(200).json(result);
     }
 
-    // Extract email and phone
-    const contactInfo = extractEmailAndPhone(html);
-    result.email = contactInfo.email;
-    result.phone = contactInfo.phone;
+    // Extract email and phone (only if not already found by AI)
+    if (result.email === 'Not found' || result.phone === 'Not found') {
+      const contactInfo = extractEmailAndPhone(html);
+      if (result.email === 'Not found') result.email = contactInfo.email;
+      if (result.phone === 'Not found') result.phone = contactInfo.phone;
+    }
 
-    // Extract social links
+    // Extract social links (only for platforms not found by AI)
     const socialLinks = extractSocialLinks(html, website);
     
-    // Update result with found links
+    // Update result with found links (don't overwrite AI results)
     for (const [platform, url] of Object.entries(socialLinks)) {
-      if (platform in result) {
+      if (platform in result && result[platform as keyof EnrichResult] === 'Not found') {
         result[platform as keyof EnrichResult] = url;
       }
     }
