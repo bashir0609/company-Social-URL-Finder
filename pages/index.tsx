@@ -127,14 +127,16 @@ export default function Home() {
 
   // Fetch available models from OpenRouter
   const fetchModels = async () => {
-    if (!apiKey) {
-      setErrorMessage('🔑 Please enter your OpenRouter API key first to fetch models.');
-      return;
-    }
-
     setLoadingModels(true);
+    setErrorMessage('');
+    
     try {
-      const response = await axios.get(`/api/models?apiKey=${encodeURIComponent(apiKey)}`);
+      // Pass apiKey if available, otherwise backend will use env variable
+      const url = apiKey 
+        ? `/api/models?apiKey=${encodeURIComponent(apiKey)}`
+        : '/api/models';
+      
+      const response = await axios.get(url);
       const models = response.data.models;
       setAvailableModels(models);
       
@@ -145,7 +147,8 @@ export default function Home() {
       }
     } catch (error: any) {
       console.error('Error fetching models:', error);
-      setErrorMessage('❌ Failed to fetch models. Check your API key.');
+      const errorMsg = error.response?.data?.error || error.message;
+      setErrorMessage(`❌ Failed to fetch models: ${errorMsg}`);
     } finally {
       setLoadingModels(false);
     }
@@ -553,7 +556,7 @@ export default function Home() {
                   </label>
                   <button
                     onClick={fetchModels}
-                    disabled={loadingModels || !apiKey}
+                    disabled={loadingModels}
                     className="text-xs px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:bg-gray-400 flex items-center gap-1"
                   >
                     {loadingModels ? (
