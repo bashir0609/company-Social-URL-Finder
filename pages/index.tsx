@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import Head from 'next/head';
-import { Search, Upload, Download, Linkedin, Facebook, Twitter, Instagram, Youtube, Globe, Mail, Loader2, Copy, Check, Clock, FileDown, Moon, Sun, RefreshCw } from 'lucide-react';
+import { Search, Upload, Download, Linkedin, Facebook, Twitter, Instagram, Youtube, Globe, Mail, Loader2, Copy, Check, Clock, FileDown, Moon, Sun, RefreshCw, Phone } from 'lucide-react';
 import axios from 'axios';
 import Papa from 'papaparse';
 import * as XLSX from 'xlsx';
@@ -9,6 +9,8 @@ interface EnrichResult {
   company_name: string;
   website: string;
   contact_page: string;
+  email: string;
+  phone: string;
   linkedin: string;
   facebook: string;
   twitter: string;
@@ -272,6 +274,8 @@ export default function Home() {
           company_name: companies[i],
           website: '',
           contact_page: 'Not found',
+          email: 'Not found',
+          phone: 'Not found',
           linkedin: 'Not found',
           facebook: 'Not found',
           twitter: 'Not found',
@@ -622,18 +626,82 @@ export default function Home() {
                         <Mail className="w-5 h-5" />
                         Contact Information
                       </h3>
-                      {result.contact_page !== 'Not found' ? (
-                        <a 
-                          href={result.contact_page} 
-                          target="_blank" 
-                          rel="noopener noreferrer"
-                          className="text-sm text-primary hover:underline"
-                        >
-                          Contact Page
-                        </a>
-                      ) : (
-                        <p className="text-sm text-gray-500">Not found</p>
-                      )}
+                      <div className="space-y-2">
+                        {/* Email */}
+                        <div className="flex items-center gap-2">
+                          <Mail className="w-4 h-4 text-gray-500" />
+                          {result.email !== 'Not found' ? (
+                            <div className="flex items-center gap-2 flex-1">
+                              <a 
+                                href={`mailto:${result.email}`}
+                                className="text-sm text-primary hover:underline truncate"
+                                title={result.email}
+                              >
+                                {result.email}
+                              </a>
+                              <button
+                                onClick={() => copyToClipboard(result.email)}
+                                className="p-1 hover:bg-gray-200 rounded transition-colors"
+                                title="Copy email"
+                              >
+                                {copiedUrl === result.email ? (
+                                  <Check className="w-3 h-3 text-green-600" />
+                                ) : (
+                                  <Copy className="w-3 h-3 text-gray-600" />
+                                )}
+                              </button>
+                            </div>
+                          ) : (
+                            <span className="text-sm text-gray-500">No email found</span>
+                          )}
+                        </div>
+
+                        {/* Phone */}
+                        <div className="flex items-center gap-2">
+                          <Phone className="w-4 h-4 text-gray-500" />
+                          {result.phone !== 'Not found' ? (
+                            <div className="flex items-center gap-2 flex-1">
+                              <a 
+                                href={`tel:${result.phone}`}
+                                className="text-sm text-primary hover:underline"
+                                title={result.phone}
+                              >
+                                {result.phone}
+                              </a>
+                              <button
+                                onClick={() => copyToClipboard(result.phone)}
+                                className="p-1 hover:bg-gray-200 rounded transition-colors"
+                                title="Copy phone"
+                              >
+                                {copiedUrl === result.phone ? (
+                                  <Check className="w-3 h-3 text-green-600" />
+                                ) : (
+                                  <Copy className="w-3 h-3 text-gray-600" />
+                                )}
+                              </button>
+                            </div>
+                          ) : (
+                            <span className="text-sm text-gray-500">No phone found</span>
+                          )}
+                        </div>
+
+                        {/* Contact Page */}
+                        <div className="flex items-center gap-2">
+                          <Globe className="w-4 h-4 text-gray-500" />
+                          {result.contact_page !== 'Not found' ? (
+                            <a 
+                              href={result.contact_page} 
+                              target="_blank" 
+                              rel="noopener noreferrer"
+                              className="text-sm text-primary hover:underline"
+                            >
+                              Contact Page
+                            </a>
+                          ) : (
+                            <span className="text-sm text-gray-500">No contact page found</span>
+                          )}
+                        </div>
+                      </div>
                     </div>
                   </div>
 
