@@ -583,7 +583,10 @@ export default async function handler(
       // Merge AI results into result object
       for (const [key, value] of Object.entries(aiResults)) {
         if (value && value !== 'Not found') {
-          result[key as keyof EnrichResult] = value as string;
+          // Skip keywords field as it's handled separately
+          if (key !== 'keywords') {
+            result[key as keyof EnrichResult] = value as any;
+          }
         }
       }
       
