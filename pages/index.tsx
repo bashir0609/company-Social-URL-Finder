@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import Head from 'next/head';
-import { Search, Upload, Download, Linkedin, Facebook, Twitter, Instagram, Youtube, Globe, Mail, Loader2, Copy, Check, Clock, FileDown, Moon, Sun, RefreshCw, Phone } from 'lucide-react';
+import { Search, Upload, Download, Linkedin, Facebook, Twitter, Instagram, Youtube, Globe, Mail, Loader2, Copy, Check, Clock, FileDown, Moon, Sun, RefreshCw, Phone, Eye, TrendingUp } from 'lucide-react';
 import axios from 'axios';
 import Papa from 'papaparse';
 import * as XLSX from 'xlsx';
@@ -43,8 +43,10 @@ export default function Home() {
   const [searchProgress, setSearchProgress] = useState<string>('');
   const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>(['linkedin', 'facebook', 'twitter', 'instagram', 'youtube', 'tiktok', 'pinterest', 'github']);
   const [showPlatformFilter, setShowPlatformFilter] = useState(false);
+  const [visitorCount, setVisitorCount] = useState(0);
+  const [searchCount, setSearchCount] = useState(0);
 
-  // Load recent searches and dark mode from localStorage
+  // Load recent searches, dark mode, and visitor stats from localStorage
   useEffect(() => {
     const saved = localStorage.getItem('recentSearches');
     if (saved) {
@@ -55,6 +57,18 @@ export default function Home() {
     if (savedDarkMode === 'true') {
       setDarkMode(true);
       document.documentElement.classList.add('dark');
+    }
+
+    // Track visitor count
+    const visitors = localStorage.getItem('visitorCount');
+    const newVisitorCount = visitors ? parseInt(visitors) + 1 : 1;
+    setVisitorCount(newVisitorCount);
+    localStorage.setItem('visitorCount', newVisitorCount.toString());
+
+    // Load search count
+    const searches = localStorage.getItem('searchCount');
+    if (searches) {
+      setSearchCount(parseInt(searches));
     }
   }, []);
 
@@ -135,6 +149,13 @@ export default function Home() {
     }
   };
 
+  // Increment search count
+  const incrementSearchCount = () => {
+    const newCount = searchCount + 1;
+    setSearchCount(newCount);
+    localStorage.setItem('searchCount', newCount.toString());
+  };
+
   const handleSingleSearch = async () => {
     if (!companyInput.trim()) return;
 
@@ -145,6 +166,9 @@ export default function Home() {
 
     // Add to recent searches
     addToRecentSearches(companyInput);
+    
+    // Increment search counter
+    incrementSearchCount();
 
     try {
       // Simulate progress updates
@@ -313,7 +337,7 @@ export default function Home() {
 
       <main className={`min-h-screen transition-colors ${darkMode ? 'bg-gray-900' : 'bg-gradient-to-b from-blue-50 to-white'}`}>
         <div className="container mx-auto px-4 py-8 max-w-6xl">
-          {/* Header with Dark Mode Toggle */}
+          {/* Header with Dark Mode Toggle and Stats */}
           <div className="flex justify-between items-start mb-8">
             <div className="flex-1 text-center">
               <h1 className={`text-4xl font-bold mb-2 ${darkMode ? 'text-blue-400' : 'text-primary'}`}>
@@ -324,6 +348,20 @@ export default function Home() {
               </p>
               <div className="mt-2 text-xs text-gray-500">
                 ⌨️ Shortcuts: <kbd className="px-2 py-1 bg-gray-200 dark:bg-gray-700 rounded">Ctrl+K</kbd> Focus | <kbd className="px-2 py-1 bg-gray-200 dark:bg-gray-700 rounded">Ctrl+Enter</kbd> Search | <kbd className="px-2 py-1 bg-gray-200 dark:bg-gray-700 rounded">Esc</kbd> Clear
+              </div>
+              
+              {/* Visitor Counter */}
+              <div className="mt-3 flex justify-center gap-4">
+                <div className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs ${darkMode ? 'bg-gray-800 text-gray-300' : 'bg-blue-100 text-blue-700'}`}>
+                  <Eye className="w-3 h-3" />
+                  <span className="font-semibold">{visitorCount.toLocaleString()}</span>
+                  <span>visits</span>
+                </div>
+                <div className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs ${darkMode ? 'bg-gray-800 text-gray-300' : 'bg-green-100 text-green-700'}`}>
+                  <TrendingUp className="w-3 h-3" />
+                  <span className="font-semibold">{searchCount.toLocaleString()}</span>
+                  <span>searches</span>
+                </div>
               </div>
             </div>
             <button
