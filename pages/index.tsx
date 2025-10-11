@@ -30,7 +30,7 @@ export default function Home() {
   const [apiKey, setApiKey] = useState('');
   const [geminiApiKey, setGeminiApiKey] = useState('');
   const [showApiKey, setShowApiKey] = useState(false);
-  const [method, setMethod] = useState<'extraction' | 'ai'>('extraction');
+  const [method, setMethod] = useState<'extraction' | 'ai' | 'hybrid'>('extraction');
   const [customPrompt, setCustomPrompt] = useState('');
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -51,6 +51,7 @@ export default function Home() {
   const [availableModels, setAvailableModels] = useState<Array<{id: string; name: string; isFree?: boolean}>>([]);
   const [selectedModel, setSelectedModel] = useState<string>('');
   const [loadingModels, setLoadingModels] = useState(false);
+  const [hasEnvKeys, setHasEnvKeys] = useState({ openrouter: false, gemini: false });
 
   // Load recent searches, dark mode, and visitor stats from localStorage
   useEffect(() => {
@@ -88,6 +89,22 @@ export default function Home() {
       localStorage.setItem('darkMode', 'false');
     }
   }, [darkMode]);
+
+  // Check environment variables on load
+  useEffect(() => {
+    const checkEnvVars = async () => {
+      try {
+        const response = await axios.get('/api/check-env');
+        setHasEnvKeys({
+          openrouter: response.data.hasOpenRouterKey,
+          gemini: response.data.hasGeminiKey
+        });
+      } catch (error) {
+        console.error('Failed to check environment variables:', error);
+      }
+    };
+    checkEnvVars();
+  }, []);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -419,18 +436,30 @@ export default function Home() {
           <div className="bg-white rounded-lg shadow-md p-4 mb-6 max-w-2xl mx-auto">
             <h3 className="text-sm font-semibold text-gray-700 mb-3">🔑 API Keys (Optional)</h3>
             
+            {/* Environment Status */}
+            {(hasEnvKeys.openrouter || hasEnvKeys.gemini) && (
+              <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg">
+                <p className="text-sm text-green-700 font-medium mb-1">✅ Environment Variables Detected</p>
+                <div className="text-xs text-green-600 space-y-1">
+                  {hasEnvKeys.openrouter && <p>• OpenRouter API key is set</p>}
+                  {hasEnvKeys.gemini && <p>• Gemini API key is set</p>}
+                </div>
+                <p className="text-xs text-green-600 mt-2">You can use AI features without entering keys below.</p>
+              </div>
+            )}
+            
             {/* OpenRouter API Key */}
             <div className="mb-4">
               <div className="flex items-center gap-4">
                 <div className="flex-1">
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    OpenRouter API Key
+                    OpenRouter API Key {hasEnvKeys.openrouter && <span className="text-green-600 text-xs">(✓ Set in environment)</span>}
                   </label>
                   <input
                     type={showApiKey ? 'text' : 'password'}
                     value={apiKey}
                     onChange={(e) => setApiKey(e.target.value)}
-                    placeholder="sk-or-v1-... (optional if set in environment)"
+                    placeholder={hasEnvKeys.openrouter ? "Using environment variable" : "sk-or-v1-... (optional)"}
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent text-sm"
                   />
                 </div>
@@ -454,13 +483,13 @@ export default function Home() {
               <div className="flex items-center gap-4">
                 <div className="flex-1">
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Google Gemini API Key
+                    Google Gemini API Key {hasEnvKeys.gemini && <span className="text-green-600 text-xs">(✓ Set in environment)</span>}
                   </label>
                   <input
                     type={showApiKey ? 'text' : 'password'}
                     value={geminiApiKey}
                     onChange={(e) => setGeminiApiKey(e.target.value)}
-                    placeholder="AIzaSy... (optional if set in environment)"
+                    placeholder={hasEnvKeys.gemini ? "Using environment variable" : "AIzaSy... (optional)"}
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent text-sm"
                   />
                 </div>
@@ -473,9 +502,11 @@ export default function Home() {
               </p>
             </div>
 
-            <p className="text-xs text-gray-600 mt-3 p-2 bg-blue-50 rounded">
-              💡 <strong>Note:</strong> Keys are optional if set in environment variables. App works without keys using extraction method.
-            </p>
+            {!hasEnvKeys.openrouter && !hasEnvKeys.gemini && (
+              <p className="text-xs text-gray-600 mt-3 p-2 bg-blue-50 rounded">
+                💡 <strong>Note:</strong> Keys are optional if set in environment variables. App works without keys using extraction method.
+              </p>
+            )}
           </div>
 
           {/* Method Selection */}
@@ -484,36 +515,54 @@ export default function Home() {
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 Search Method
               </label>
-              <div className="flex gap-4">
-                <label className="flex items-center cursor-pointer">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <label className="flex items-center cursor-pointer p-3 border-2 rounded-lg hover:bg-gray-50 transition-colors" style={{ borderColor: method === 'extraction' ? '#3b82f6' : '#e5e7eb' }}>
                   <input
                     type="radio"
                     value="extraction"
                     checked={method === 'extraction'}
-                    onChange={(e) => setMethod(e.target.value as 'extraction' | 'ai')}
-                    className="mr-2"
+                    onChange={(e) => setMethod(e.target.value as 'extraction' | 'ai' | 'hybrid')}
+                    className="mr-3"
                   />
-                  <span className="text-sm">
-                    <strong>Extraction</strong> - Fast web scraping (No API key needed)
-                  </span>
+                  <div>
+                    <div className="text-sm font-bold">Extraction</div>
+                    <div className="text-xs text-gray-600">Fast web scraping</div>
+                    <div className="text-xs text-green-600">✓ No API key needed</div>
+                  </div>
                 </label>
-                <label className="flex items-center cursor-pointer">
+                <label className="flex items-center cursor-pointer p-3 border-2 rounded-lg hover:bg-gray-50 transition-colors" style={{ borderColor: method === 'ai' ? '#3b82f6' : '#e5e7eb' }}>
                   <input
                     type="radio"
                     value="ai"
                     checked={method === 'ai'}
-                    onChange={(e) => setMethod(e.target.value as 'extraction' | 'ai')}
-                    className="mr-2"
+                    onChange={(e) => setMethod(e.target.value as 'extraction' | 'ai' | 'hybrid')}
+                    className="mr-3"
                   />
-                  <span className="text-sm">
-                    <strong>AI</strong> - Enhanced search (Requires API key)
-                  </span>
+                  <div>
+                    <div className="text-sm font-bold">AI Only</div>
+                    <div className="text-xs text-gray-600">Pure AI search</div>
+                    <div className="text-xs text-blue-600">⚡ Requires API key</div>
+                  </div>
+                </label>
+                <label className="flex items-center cursor-pointer p-3 border-2 rounded-lg hover:bg-gray-50 transition-colors" style={{ borderColor: method === 'hybrid' ? '#3b82f6' : '#e5e7eb' }}>
+                  <input
+                    type="radio"
+                    value="hybrid"
+                    checked={method === 'hybrid'}
+                    onChange={(e) => setMethod(e.target.value as 'extraction' | 'ai' | 'hybrid')}
+                    className="mr-3"
+                  />
+                  <div>
+                    <div className="text-sm font-bold">Hybrid</div>
+                    <div className="text-xs text-gray-600">AI + Extraction</div>
+                    <div className="text-xs text-purple-600">🚀 Best results</div>
+                  </div>
                 </label>
               </div>
             </div>
 
             {/* AI Provider Selection */}
-            {method === 'ai' && (
+            {(method === 'ai' || method === 'hybrid') && (
               <div className="mb-4">
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   AI Provider
