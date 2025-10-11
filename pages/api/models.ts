@@ -22,14 +22,17 @@ export default async function handler(
 
   const { apiKey } = req.query;
 
-  if (!apiKey) {
-    return res.status(400).json({ error: 'API key required' });
+  // Use API key from query or environment variable
+  const effectiveApiKey = apiKey || process.env.OPENROUTER_API_KEY;
+
+  if (!effectiveApiKey) {
+    return res.status(400).json({ error: 'API key required. Please provide it in the request or set OPENROUTER_API_KEY environment variable.' });
   }
 
   try {
     const response = await axios.get('https://openrouter.ai/api/v1/models', {
       headers: {
-        'Authorization': `Bearer ${apiKey}`,
+        'Authorization': `Bearer ${effectiveApiKey}`,
         'HTTP-Referer': process.env.SITE_URL || 'http://localhost:3000',
         'X-Title': 'Company Social Finder',
       },
