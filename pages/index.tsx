@@ -19,13 +19,16 @@ interface EnrichResult {
   tiktok: string;
   pinterest: string;
   github: string;
+  keywords?: string[];
   status: string;
 }
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState<'single' | 'bulk'>('single');
   const [companyInput, setCompanyInput] = useState('');
+  const [aiProvider, setAiProvider] = useState<'openrouter' | 'gemini'>('openrouter');
   const [apiKey, setApiKey] = useState('');
+  const [geminiApiKey, setGeminiApiKey] = useState('');
   const [showApiKey, setShowApiKey] = useState(false);
   const [method, setMethod] = useState<'extraction' | 'ai'>('extraction');
   const [customPrompt, setCustomPrompt] = useState('');
@@ -45,8 +48,8 @@ export default function Home() {
   const [showPlatformFilter, setShowPlatformFilter] = useState(false);
   const [visitorCount, setVisitorCount] = useState(0);
   const [searchCount, setSearchCount] = useState(0);
-  const [availableModels, setAvailableModels] = useState<Array<{id: string; name: string}>>([]);
-  const [selectedModel, setSelectedModel] = useState<string>('openai/gpt-3.5-turbo');
+  const [availableModels, setAvailableModels] = useState<Array<{id: string; name: string; isFree?: boolean}>>([]);
+  const [selectedModel, setSelectedModel] = useState<string>('');
   const [loadingModels, setLoadingModels] = useState(false);
 
   // Load recent searches, dark mode, and visitor stats from localStorage
@@ -132,9 +135,13 @@ export default function Home() {
     setLoadingModels(true);
     try {
       const response = await axios.get(`/api/models?apiKey=${encodeURIComponent(apiKey)}`);
-      setAvailableModels(response.data.models);
-      if (response.data.models.length > 0) {
-        setSelectedModel(response.data.models[0].id);
+      const models = response.data.models;
+      setAvailableModels(models);
+      
+      // Set first free model as default, or first model if no free models
+      if (models.length > 0) {
+        const firstFreeModel = models.find((m: any) => m.isFree);
+        setSelectedModel(firstFreeModel ? firstFreeModel.id : models[0].id);
       }
     } catch (error: any) {
       console.error('Error fetching models:', error);
@@ -204,7 +211,9 @@ export default function Home() {
       const response = await axios.post<EnrichResult>('/api/enrich', {
         company: companyInput,
         method: method,
+        aiProvider: aiProvider,
         apiKey: apiKey || undefined,
+        geminiApiKey: geminiApiKey || undefined,
         customPrompt: customPrompt || undefined,
         platforms: selectedPlatforms,
         model: selectedModel,
@@ -317,7 +326,9 @@ export default function Home() {
         const response = await axios.post<EnrichResult>('/api/enrich', {
           company: companies[i],
           method: method,
+          aiProvider: aiProvider,
           apiKey: apiKey || undefined,
+          geminiApiKey: geminiApiKey || undefined,
           customPrompt: customPrompt || undefined,
           platforms: selectedPlatforms,
           model: selectedModel,
@@ -403,31 +414,64 @@ export default function Home() {
 
           {/* API Key Configuration */}
           <div className="bg-white rounded-lg shadow-md p-4 mb-6 max-w-2xl mx-auto">
-            <div className="flex items-center gap-4">
-              <div className="flex-1">
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  OpenRouter API Key (Optional)
-                </label>
-                <input
-                  type={showApiKey ? 'text' : 'password'}
-                  value={apiKey}
-                  onChange={(e) => setApiKey(e.target.value)}
-                  placeholder="Enter your OpenRouter API key for enhanced features"
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent text-sm"
-                />
+            <h3 className="text-sm font-semibold text-gray-700 mb-3">🔑 API Keys (Optional)</h3>
+            
+            {/* OpenRouter API Key */}
+            <div className="mb-4">
+              <div className="flex items-center gap-4">
+                <div className="flex-1">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    OpenRouter API Key
+                  </label>
+                  <input
+                    type={showApiKey ? 'text' : 'password'}
+                    value={apiKey}
+                    onChange={(e) => setApiKey(e.target.value)}
+                    placeholder="sk-or-v1-... (optional if set in environment)"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent text-sm"
+                  />
+                </div>
+                <button
+                  onClick={() => setShowApiKey(!showApiKey)}
+                  className="mt-6 px-4 py-2 text-sm text-gray-600 hover:text-gray-900 border border-gray-300 rounded-lg"
+                >
+                  {showApiKey ? <Eye className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
               </div>
-              <button
-                onClick={() => setShowApiKey(!showApiKey)}
-                className="mt-6 px-4 py-2 text-sm text-gray-600 hover:text-gray-900 border border-gray-300 rounded-lg"
-              >
-                {showApiKey ? 'Hide' : 'Show'}
-              </button>
+              <p className="text-xs text-gray-500 mt-1">
+                For OpenRouter AI. Get free key at{' '}
+                <a href="https://openrouter.ai" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+                  openrouter.ai
+                </a>
+              </p>
             </div>
-            <p className="text-xs text-gray-500 mt-2">
-              💡 App works without API key. Add key for AI-enhanced search. Get one at{' '}
-              <a href="https://openrouter.ai" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
-                openrouter.ai
-              </a>
+
+            {/* Gemini API Key */}
+            <div>
+              <div className="flex items-center gap-4">
+                <div className="flex-1">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Google Gemini API Key
+                  </label>
+                  <input
+                    type={showApiKey ? 'text' : 'password'}
+                    value={geminiApiKey}
+                    onChange={(e) => setGeminiApiKey(e.target.value)}
+                    placeholder="AIzaSy... (optional if set in environment)"
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent text-sm"
+                  />
+                </div>
+              </div>
+              <p className="text-xs text-gray-500 mt-1">
+                For Gemini AI. Get key at{' '}
+                <a href="https://makersuite.google.com/app/apikey" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+                  Google AI Studio
+                </a>
+              </p>
+            </div>
+
+            <p className="text-xs text-gray-600 mt-3 p-2 bg-blue-50 rounded">
+              💡 <strong>Note:</strong> Keys are optional if set in environment variables. App works without keys using extraction method.
             </p>
           </div>
 
@@ -465,8 +509,43 @@ export default function Home() {
               </div>
             </div>
 
-            {/* AI Model Selection */}
+            {/* AI Provider Selection */}
             {method === 'ai' && (
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  AI Provider
+                </label>
+                <div className="flex gap-4">
+                  <label className="flex items-center cursor-pointer">
+                    <input
+                      type="radio"
+                      value="openrouter"
+                      checked={aiProvider === 'openrouter'}
+                      onChange={(e) => setAiProvider(e.target.value as 'openrouter' | 'gemini')}
+                      className="mr-2"
+                    />
+                    <span className="text-sm">
+                      <strong>OpenRouter</strong> - Free models available 🆓
+                    </span>
+                  </label>
+                  <label className="flex items-center cursor-pointer">
+                    <input
+                      type="radio"
+                      value="gemini"
+                      checked={aiProvider === 'gemini'}
+                      onChange={(e) => setAiProvider(e.target.value as 'openrouter' | 'gemini')}
+                      className="mr-2"
+                    />
+                    <span className="text-sm">
+                      <strong>Google Gemini</strong> - Premium quality ⭐
+                    </span>
+                  </label>
+                </div>
+              </div>
+            )}
+
+            {/* AI Model Selection (OpenRouter only) */}
+            {method === 'ai' && aiProvider === 'openrouter' && (
               <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
                 <div className="flex items-center justify-between mb-2">
                   <label className="block text-sm font-medium text-gray-700">
@@ -492,20 +571,25 @@ export default function Home() {
                 </div>
                 
                 {availableModels.length > 0 ? (
-                  <select
-                    value={selectedModel}
-                    onChange={(e) => setSelectedModel(e.target.value)}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent text-sm"
-                  >
-                    {availableModels.map((model) => (
-                      <option key={model.id} value={model.id}>
-                        {model.name}
-                      </option>
-                    ))}
-                  </select>
+                  <>
+                    <select
+                      value={selectedModel}
+                      onChange={(e) => setSelectedModel(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent text-sm"
+                    >
+                      {availableModels.map((model) => (
+                        <option key={model.id} value={model.id}>
+                          {model.isFree ? '🆓 ' : ''}{model.name}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="text-xs text-gray-500 mt-2">
+                      💡 <strong>Free models</strong> are marked with 🆓 - perfect for freelancers!
+                    </p>
+                  </>
                 ) : (
                   <p className="text-xs text-gray-600">
-                    Click "Fetch Models" to load available AI models from OpenRouter
+                    Click "Fetch Models" to load available AI models from OpenRouter (includes free models!)
                   </p>
                 )}
               </div>
