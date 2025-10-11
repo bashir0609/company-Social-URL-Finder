@@ -190,6 +190,8 @@ export default function Home() {
         company_name: companyInput,
         website: '',
         contact_page: 'Not found',
+        email: 'Not found',
+        phone: 'Not found',
         linkedin: 'Not found',
         facebook: 'Not found',
         twitter: 'Not found',
