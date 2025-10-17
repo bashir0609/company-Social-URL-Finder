@@ -259,32 +259,37 @@ async function geminiAISearch(
 ): Promise<Partial<EnrichResult>> {
   const defaultPrompt = `You are a professional company research assistant. Find the official online presence for "${company}".
 
-IMPORTANT INSTRUCTIONS:
-1. Search for VERIFIED and OFFICIAL profiles only
-2. Return COMPLETE URLs (starting with https://)
-3. For social media, find the main company/brand page (not employee profiles)
-4. Verify the profile belongs to the correct company
+CRITICAL RULES:
+1. Return ONLY REAL, VERIFIED data - NO fake or generated information
+2. Use COMPLETE URLs starting with https://
+3. Find OFFICIAL company/brand pages (not employee profiles)
+4. Verify the profile belongs to the CORRECT company
 5. If uncertain or not found, use "Not found"
-6. Generate 10-15 relevant keywords that describe the company's business, industry, products, or services
+6. For email: Use VALID format (one @ symbol only, real domain)
+7. For phone: Use REAL numbers (no 555-xxxx or fake patterns)
+8. For contact_page: Find the CONTACT page URL (not about page)
+9. Generate 10-15 relevant keywords from the company's actual business
 
-Return your findings in this EXACT JSON format (no markdown, no explanation):
+WARNING: Do NOT generate fake emails like "info@company@gmail.com" or fake phone numbers.
+
+Return your findings in this EXACT JSON format (no markdown, no code blocks):
 {
-  "website": "official company website URL",
-  "linkedin": "LinkedIn company page URL (linkedin.com/company/...)",
-  "facebook": "Facebook page URL",
-  "twitter": "Twitter/X profile URL (twitter.com/... or x.com/...)",
-  "instagram": "Instagram profile URL",
-  "youtube": "YouTube channel URL",
-  "tiktok": "TikTok profile URL",
-  "pinterest": "Pinterest profile URL",
-  "github": "GitHub organization URL",
-  "email": "official contact email",
-  "phone": "contact phone number with country code",
-  "contact_page": "contact/about page URL",
-  "keywords": ["keyword1", "keyword2", "keyword3", "..."]
+  "website": "https://company.com",
+  "linkedin": "https://linkedin.com/company/name",
+  "facebook": "https://facebook.com/company",
+  "twitter": "https://twitter.com/company or https://x.com/company",
+  "instagram": "https://instagram.com/company",
+  "youtube": "https://youtube.com/@company",
+  "tiktok": "https://tiktok.com/@company",
+  "pinterest": "https://pinterest.com/company",
+  "github": "https://github.com/company",
+  "email": "contact@company.com",
+  "phone": "+1234567890",
+  "contact_page": "https://company.com/contact",
+  "keywords": ["keyword1", "keyword2", "keyword3"]
 }
 
-Return ONLY the JSON object, nothing else.`;
+Return ONLY the JSON object. NO explanations, NO markdown formatting.`;
 
   const prompt = customPrompt || defaultPrompt;
 
@@ -343,39 +348,44 @@ Return ONLY the JSON object, nothing else.`;
 }
 
 async function aiSearchSocialProfiles(
-  company: string, 
-  apiKey: string, 
-  model: string = 'openai/gpt-3.5-turbo',
+  company: string,
+  apiKey: string,
+  model?: string,
   customPrompt?: string
 ): Promise<Partial<EnrichResult>> {
   const defaultPrompt = `You are a professional company research assistant. Find the official online presence for "${company}".
 
-IMPORTANT INSTRUCTIONS:
-1. Search for VERIFIED and OFFICIAL profiles only
-2. Return COMPLETE URLs (starting with https://)
-3. For social media, find the main company/brand page (not employee profiles)
-4. Verify the profile belongs to the correct company
+CRITICAL RULES:
+1. Return ONLY REAL, VERIFIED data - NO fake or generated information
+2. Use COMPLETE URLs starting with https://
+3. Find OFFICIAL company/brand pages (not employee profiles)
+4. Verify the profile belongs to the CORRECT company
 5. If uncertain or not found, use "Not found"
-6. Generate 10-15 relevant keywords that describe the company's business, industry, products, or services
+6. For email: Use VALID format (one @ symbol only, real domain)
+7. For phone: Use REAL numbers (no 555-xxxx or fake patterns)
+8. For contact_page: Find the CONTACT page URL (not about page)
+9. Generate 10-15 relevant keywords from the company's actual business
 
-Return your findings in this EXACT JSON format (no markdown, no explanation):
+WARNING: Do NOT generate fake emails like "info@company@gmail.com" or fake phone numbers.
+
+Return your findings in this EXACT JSON format (no markdown, no code blocks):
 {
-  "website": "official company website URL",
-  "linkedin": "LinkedIn company page URL (linkedin.com/company/...)",
-  "facebook": "Facebook page URL",
-  "twitter": "Twitter/X profile URL (twitter.com/... or x.com/...)",
-  "instagram": "Instagram profile URL",
-  "youtube": "YouTube channel URL",
-  "tiktok": "TikTok profile URL",
-  "pinterest": "Pinterest profile URL",
-  "github": "GitHub organization URL",
-  "email": "official contact email",
-  "phone": "contact phone number with country code",
-  "contact_page": "contact/about page URL",
-  "keywords": ["keyword1", "keyword2", "keyword3", "..."]
+  "website": "https://company.com",
+  "linkedin": "https://linkedin.com/company/name",
+  "facebook": "https://facebook.com/company",
+  "twitter": "https://twitter.com/company or https://x.com/company",
+  "instagram": "https://instagram.com/company",
+  "youtube": "https://youtube.com/@company",
+  "tiktok": "https://tiktok.com/@company",
+  "pinterest": "https://pinterest.com/company",
+  "github": "https://github.com/company",
+  "email": "contact@company.com",
+  "phone": "+1234567890",
+  "contact_page": "https://company.com/contact",
+  "keywords": ["keyword1", "keyword2", "keyword3"]
 }
 
-Return ONLY the JSON object, nothing else.`;
+Return ONLY the JSON object. NO explanations, NO markdown formatting.`;
 
   const prompt = customPrompt || defaultPrompt;
 

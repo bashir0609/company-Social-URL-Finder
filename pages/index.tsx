@@ -1137,9 +1137,9 @@ export default function Home() {
                               href={result.contact_page} 
                               target="_blank" 
                               rel="noopener noreferrer"
-                              className="text-sm text-primary hover:underline"
+                              className="text-sm text-primary hover:underline break-all"
                             >
-                              Contact Page
+                              {result.contact_page}
                             </a>
                           ) : (
                             <span className="text-sm text-gray-500">No contact page found</span>
