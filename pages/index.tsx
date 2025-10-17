@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import Head from 'next/head';
-import { Search, Upload, Download, Linkedin, Facebook, Twitter, Instagram, Youtube, Globe, Mail, Loader2, Copy, Check, Clock, FileDown, Moon, Sun, RefreshCw, Phone, Eye, TrendingUp } from 'lucide-react';
+import { Search, Upload, Download, Linkedin, Facebook, Twitter, Instagram, Youtube, Globe, Mail, Loader2, Copy, Check, Clock, FileDown, Moon, Sun, RefreshCw, Phone, Eye, TrendingUp, Settings, X } from 'lucide-react';
 import axios from 'axios';
 import Papa from 'papaparse';
 import * as XLSX from 'xlsx';
@@ -34,6 +34,7 @@ export default function Home() {
   const [customPrompt, setCustomPrompt] = useState('');
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [showApiKeys, setShowApiKeys] = useState(false);
+  const [showSidebar, setShowSidebar] = useState(false);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<EnrichResult | null>(null);
   const [bulkResults, setBulkResults] = useState<EnrichResult[]>([]);
@@ -468,6 +469,228 @@ export default function Home() {
       </Head>
 
       <main className={`min-h-screen transition-colors ${darkMode ? 'bg-gray-900' : 'bg-gradient-to-b from-blue-50 to-white'}`}>
+        {/* Sidebar */}
+        <div className={`fixed top-0 right-0 h-full w-96 bg-white shadow-2xl transform transition-transform duration-300 ease-in-out z-50 overflow-y-auto ${
+          showSidebar ? 'translate-x-0' : 'translate-x-full'
+        }`}>
+          <div className="p-6">
+            {/* Sidebar Header */}
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
+                <Settings className="w-5 h-5" />
+                Configuration
+              </h2>
+              <button
+                onClick={() => setShowSidebar(false)}
+                className="p-2 hover:bg-gray-100 rounded-lg transition-colors"
+              >
+                <X className="w-5 h-5 text-gray-600" />
+              </button>
+            </div>
+
+            {/* API Keys Section */}
+            <div className="mb-6">
+              <h3 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+                🔑 API Keys
+                {(hasEnvKeys.openrouter || hasEnvKeys.gemini) && (
+                  <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full">✓ Set</span>
+                )}
+              </h3>
+              
+              {/* Environment Status */}
+              {(hasEnvKeys.openrouter || hasEnvKeys.gemini) && (
+                <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg">
+                  <p className="text-xs text-green-700 font-medium mb-1">✅ Environment Variables</p>
+                  <div className="text-xs text-green-600 space-y-1">
+                    {hasEnvKeys.openrouter && <p>• OpenRouter key set</p>}
+                    {hasEnvKeys.gemini && <p>• Gemini key set</p>}
+                  </div>
+                </div>
+              )}
+              
+              {/* OpenRouter API Key */}
+              <div className="mb-4">
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  OpenRouter API Key
+                </label>
+                <input
+                  type={showApiKey ? 'text' : 'password'}
+                  value={apiKey}
+                  onChange={(e) => setApiKey(e.target.value)}
+                  placeholder="sk-or-v1-..."
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent text-sm"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Get free key at{' '}
+                  <a href="https://openrouter.ai" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+                    openrouter.ai
+                  </a>
+                </p>
+              </div>
+
+              {/* Gemini API Key */}
+              <div className="mb-4">
+                <label className="block text-xs font-medium text-gray-700 mb-1">
+                  Google Gemini API Key
+                </label>
+                <input
+                  type={showApiKey ? 'text' : 'password'}
+                  value={geminiApiKey}
+                  onChange={(e) => setGeminiApiKey(e.target.value)}
+                  placeholder="AIzaSy..."
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent text-sm"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Get key at{' '}
+                  <a href="https://makersuite.google.com/app/apikey" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+                    Google AI Studio
+                  </a>
+                </p>
+              </div>
+
+              <button
+                onClick={() => setShowApiKey(!showApiKey)}
+                className="text-xs text-gray-600 hover:text-gray-900 flex items-center gap-1"
+              >
+                <Eye className="w-3 h-3" />
+                {showApiKey ? 'Hide' : 'Show'} keys
+              </button>
+            </div>
+
+            {/* AI Provider Selection */}
+            {(method === 'ai' || method === 'hybrid') && (
+              <div className="mb-6">
+                <h3 className="text-sm font-semibold text-gray-700 mb-3">🤖 AI Provider</h3>
+                <div className="space-y-2">
+                  <label className="flex items-center gap-2 cursor-pointer p-3 border rounded-lg hover:bg-gray-50">
+                    <input
+                      type="radio"
+                      value="openrouter"
+                      checked={aiProvider === 'openrouter'}
+                      onChange={(e) => setAiProvider(e.target.value as 'openrouter' | 'gemini')}
+                      className="text-primary"
+                    />
+                    <div>
+                      <div className="text-sm font-medium">OpenRouter</div>
+                      <div className="text-xs text-gray-500">Free models available</div>
+                    </div>
+                  </label>
+                  <label className="flex items-center gap-2 cursor-pointer p-3 border rounded-lg hover:bg-gray-50">
+                    <input
+                      type="radio"
+                      value="gemini"
+                      checked={aiProvider === 'gemini'}
+                      onChange={(e) => setAiProvider(e.target.value as 'openrouter' | 'gemini')}
+                      className="text-primary"
+                    />
+                    <div>
+                      <div className="text-sm font-medium">Google Gemini</div>
+                      <div className="text-xs text-gray-500">Premium quality</div>
+                    </div>
+                  </label>
+                </div>
+              </div>
+            )}
+
+            {/* AI Model Selection */}
+            {(method === 'ai' || method === 'hybrid') && aiProvider === 'openrouter' && (
+              <div className="mb-6">
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-sm font-semibold text-gray-700">AI Model</h3>
+                  <button
+                    onClick={fetchModels}
+                    disabled={loadingModels}
+                    className="text-xs px-2 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:bg-gray-400 flex items-center gap-1"
+                  >
+                    {loadingModels ? (
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                    ) : (
+                      <RefreshCw className="w-3 h-3" />
+                    )}
+                  </button>
+                </div>
+                
+                {loadingModels ? (
+                  <div className="flex items-center justify-center py-4">
+                    <Loader2 className="w-4 h-4 animate-spin text-blue-600 mr-2" />
+                    <span className="text-xs text-gray-600">Loading models...</span>
+                  </div>
+                ) : availableModels.length > 0 ? (
+                  <>
+                    <select
+                      value={selectedModel}
+                      onChange={(e) => setSelectedModel(e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary text-sm"
+                    >
+                      {availableModels.map((model) => (
+                        <option key={model.id} value={model.id}>
+                          {model.isFree ? '🆓 ' : ''}{model.name}
+                        </option>
+                      ))}
+                    </select>
+                    <p className="text-xs text-gray-500 mt-2">
+                      💡 Free models marked with 🆓
+                    </p>
+                  </>
+                ) : (
+                  <p className="text-xs text-gray-600">
+                    Click refresh to load models
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* Platform Filter */}
+            <div className="mb-6">
+              <h3 className="text-sm font-semibold text-gray-700 mb-3">🎯 Platforms to Search</h3>
+              <div className="grid grid-cols-2 gap-2">
+                {[
+                  { key: 'linkedin', label: 'LinkedIn', icon: '💼' },
+                  { key: 'facebook', label: 'Facebook', icon: '📘' },
+                  { key: 'twitter', label: 'Twitter/X', icon: '🐦' },
+                  { key: 'instagram', label: 'Instagram', icon: '📸' },
+                  { key: 'youtube', label: 'YouTube', icon: '📺' },
+                  { key: 'tiktok', label: 'TikTok', icon: '🎵' },
+                  { key: 'pinterest', label: 'Pinterest', icon: '📌' },
+                  { key: 'github', label: 'GitHub', icon: '💻' },
+                ].map(({ key, label, icon }) => (
+                  <label key={key} className="flex items-center gap-2 cursor-pointer text-xs">
+                    <input
+                      type="checkbox"
+                      checked={selectedPlatforms.includes(key)}
+                      onChange={() => togglePlatform(key)}
+                      className="w-4 h-4 text-primary"
+                    />
+                    <span>{icon} {label}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            {/* Custom Prompt */}
+            {(method === 'ai' || method === 'hybrid') && (
+              <div className="mb-6">
+                <h3 className="text-sm font-semibold text-gray-700 mb-2">✍️ Custom AI Prompt</h3>
+                <textarea
+                  value={customPrompt}
+                  onChange={(e) => setCustomPrompt(e.target.value)}
+                  placeholder="Leave empty for default prompt..."
+                  rows={4}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary text-xs"
+                />
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Overlay */}
+        {showSidebar && (
+          <div
+            className="fixed inset-0 bg-black bg-opacity-50 z-40"
+            onClick={() => setShowSidebar(false)}
+          />
+        )}
+
         <div className="container mx-auto px-4 py-8 max-w-6xl">
           {/* Header with Dark Mode Toggle and Stats */}
           <div className="flex justify-between items-start mb-8">
@@ -496,107 +719,25 @@ export default function Home() {
                 </div>
               </div>
             </div>
-            <button
-              onClick={() => setDarkMode(!darkMode)}
-              className={`p-3 rounded-lg transition-colors ${darkMode ? 'bg-gray-800 text-yellow-400 hover:bg-gray-700' : 'bg-white text-gray-700 hover:bg-gray-100'} shadow-md`}
-              title="Toggle dark mode"
-            >
-              {darkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setShowSidebar(true)}
+                className={`p-3 rounded-lg transition-colors ${darkMode ? 'bg-gray-800 text-blue-400 hover:bg-gray-700' : 'bg-white text-gray-700 hover:bg-gray-100'} shadow-md`}
+                title="Settings"
+              >
+                <Settings className="w-5 h-5" />
+              </button>
+              <button
+                onClick={() => setDarkMode(!darkMode)}
+                className={`p-3 rounded-lg transition-colors ${darkMode ? 'bg-gray-800 text-yellow-400 hover:bg-gray-700' : 'bg-white text-gray-700 hover:bg-gray-100'} shadow-md`}
+                title="Toggle dark mode"
+              >
+                {darkMode ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+              </button>
+            </div>
           </div>
 
-          {/* API Key Configuration - Collapsible */}
-          <div className="bg-white rounded-lg shadow-md mb-6 max-w-2xl mx-auto">
-            <button
-              onClick={() => setShowApiKeys(!showApiKeys)}
-              className="w-full px-4 py-3 flex items-center justify-between text-left hover:bg-gray-50 transition-colors rounded-lg"
-            >
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-semibold text-gray-700">🔑 API Keys (Optional for AI Features)</span>
-                {(hasEnvKeys.openrouter || hasEnvKeys.gemini) && (
-                  <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full">✓ Configured</span>
-                )}
-              </div>
-              <span className="text-gray-400">{showApiKeys ? '▼' : '▶'}</span>
-            </button>
-            
-            {showApiKeys && (
-              <div className="px-4 pb-4 pt-2">
-            
-            {/* Environment Status */}
-            {(hasEnvKeys.openrouter || hasEnvKeys.gemini) && (
-              <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg">
-                <p className="text-sm text-green-700 font-medium mb-1">✅ Environment Variables Detected</p>
-                <div className="text-xs text-green-600 space-y-1">
-                  {hasEnvKeys.openrouter && <p>• OpenRouter API key is set</p>}
-                  {hasEnvKeys.gemini && <p>• Gemini API key is set</p>}
-                </div>
-                <p className="text-xs text-green-600 mt-2">You can use AI features without entering keys below.</p>
-              </div>
-            )}
-            
-            {/* OpenRouter API Key */}
-            <div className="mb-4">
-              <div className="flex items-center gap-4">
-                <div className="flex-1">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    OpenRouter API Key {hasEnvKeys.openrouter && <span className="text-green-600 text-xs">(✓ Set in environment)</span>}
-                  </label>
-                  <input
-                    type={showApiKey ? 'text' : 'password'}
-                    value={apiKey}
-                    onChange={(e) => setApiKey(e.target.value)}
-                    placeholder={hasEnvKeys.openrouter ? "Using environment variable" : "sk-or-v1-... (optional)"}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent text-sm"
-                  />
-                </div>
-                <button
-                  onClick={() => setShowApiKey(!showApiKey)}
-                  className="mt-6 px-4 py-2 text-sm text-gray-600 hover:text-gray-900 border border-gray-300 rounded-lg"
-                >
-                  {showApiKey ? <Eye className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
-              </div>
-              <p className="text-xs text-gray-500 mt-1">
-                For OpenRouter AI. Get free key at{' '}
-                <a href="https://openrouter.ai" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
-                  openrouter.ai
-                </a>
-              </p>
-            </div>
-
-            {/* Gemini API Key */}
-            <div>
-              <div className="flex items-center gap-4">
-                <div className="flex-1">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Google Gemini API Key {hasEnvKeys.gemini && <span className="text-green-600 text-xs">(✓ Set in environment)</span>}
-                  </label>
-                  <input
-                    type={showApiKey ? 'text' : 'password'}
-                    value={geminiApiKey}
-                    onChange={(e) => setGeminiApiKey(e.target.value)}
-                    placeholder={hasEnvKeys.gemini ? "Using environment variable" : "AIzaSy... (optional)"}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent text-sm"
-                  />
-                </div>
-              </div>
-              <p className="text-xs text-gray-500 mt-1">
-                For Gemini AI. Get key at{' '}
-                <a href="https://makersuite.google.com/app/apikey" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
-                  Google AI Studio
-                </a>
-              </p>
-            </div>
-
-            {!hasEnvKeys.openrouter && !hasEnvKeys.gemini && (
-              <p className="text-xs text-gray-600 mt-3 p-2 bg-blue-50 rounded">
-                💡 <strong>Note:</strong> Keys are optional. App works without keys using extraction method.
-              </p>
-            )}
-              </div>
-            )}
-          </div>
+          {/* API Keys and settings moved to sidebar */}
 
           {/* Method Selection - Simplified */}
           <div className="bg-white rounded-lg shadow-md p-6 mb-6 max-w-2xl mx-auto">
@@ -760,72 +901,7 @@ export default function Home() {
               </div>
             )}
 
-            {/* Advanced Settings - Collapsible */}
-            <div className="border-t pt-4 mt-4">
-              <button
-                onClick={() => setShowAdvanced(!showAdvanced)}
-                className="w-full flex items-center justify-between text-sm font-medium text-gray-700 hover:text-primary transition-colors"
-              >
-                <span>⚙️ Advanced Settings</span>
-                <span className="text-gray-400">{showAdvanced ? '▼' : '▶'}</span>
-              </button>
-            </div>
-
-            {showAdvanced && (
-              <div className="mt-4 space-y-4">
-                <div className="p-4 bg-gray-50 rounded-lg">
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Custom AI Prompt (Optional)
-                  </label>
-                  <textarea
-                    value={customPrompt}
-                    onChange={(e) => setCustomPrompt(e.target.value)}
-                    placeholder="Default: Find all official social media profiles (LinkedIn, Facebook, Twitter, Instagram, YouTube, TikTok) for [company name]. Return the direct profile URLs."
-                    rows={4}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent text-sm"
-                  />
-                  <p className="text-xs text-gray-500 mt-1">
-                    💡 <strong>Default prompt:</strong> "Find all official social media profiles (LinkedIn, Facebook, Twitter, Instagram, YouTube, TikTok) for [company name]. Return the direct profile URLs."
-                    <br />
-                    Customize the prompt above to change how AI searches. Leave empty to use default.
-                  </p>
-                </div>
-
-                {/* Platform Filter */}
-                <div className="p-4 bg-gray-50 rounded-lg">
-                  <label className="block text-sm font-medium text-gray-700 mb-3">
-                    Select Platforms to Search
-                  </label>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                    {[
-                      { key: 'linkedin', label: 'LinkedIn', icon: '💼' },
-                      { key: 'facebook', label: 'Facebook', icon: '📘' },
-                      { key: 'twitter', label: 'Twitter/X', icon: '🐦' },
-                      { key: 'instagram', label: 'Instagram', icon: '📸' },
-                      { key: 'youtube', label: 'YouTube', icon: '📺' },
-                      { key: 'tiktok', label: 'TikTok', icon: '🎵' },
-                      { key: 'pinterest', label: 'Pinterest', icon: '📌' },
-                      { key: 'github', label: 'GitHub', icon: '💻' },
-                    ].map(({ key, label, icon }) => (
-                      <label key={key} className="flex items-center gap-2 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={selectedPlatforms.includes(key)}
-                          onChange={() => togglePlatform(key)}
-                          className="w-4 h-4 text-primary"
-                        />
-                        <span className="text-sm">
-                          {icon} {label}
-                        </span>
-                      </label>
-                    ))}
-                  </div>
-                  <p className="text-xs text-gray-500 mt-2">
-                    Uncheck platforms you don't want to search. Fewer platforms = faster results.
-                  </p>
-                </div>
-              </div>
-            )}
+            {/* Advanced settings moved to sidebar */}
           </div>
 
           {/* Tabs */}
