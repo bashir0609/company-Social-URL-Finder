@@ -771,12 +771,41 @@ export default async function handler(
       }
       
       // Merge AI results into result object (including AI-generated keywords)
+      // BUT validate emails and phones before accepting them
       for (const [key, value] of Object.entries(aiResults)) {
         if (value && value !== 'Not found') {
           if (key === 'keywords' && Array.isArray(value)) {
             // Store AI-generated keywords
             result.keywords = value;
+          } else if (key === 'email') {
+            // Validate email format before accepting AI result
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            if (emailRegex.test(value as string)) {
+              result.email = value as string;
+            } else {
+              console.log(`Rejected invalid AI email: ${value}`);
+            }
+          } else if (key === 'phone') {
+            // Validate phone format before accepting AI result
+            const digitsOnly = (value as string).replace(/\D/g, '');
+            if (digitsOnly.length >= 10 && digitsOnly.length <= 15) {
+              // Check for fake patterns
+              const isFake = 
+                (digitsOnly.includes('555') && digitsOnly.match(/555\d{4}/)) ||
+                /^(0123456789|1234567890|123456789)/.test(digitsOnly) ||
+                /^(\d)\1{5,}$/.test(digitsOnly) ||
+                digitsOnly === '0000000000' || digitsOnly === '1111111111';
+              
+              if (!isFake) {
+                result.phone = value as string;
+              } else {
+                console.log(`Rejected fake AI phone: ${value}`);
+              }
+            } else {
+              console.log(`Rejected invalid AI phone: ${value}`);
+            }
           } else if (key !== 'keywords') {
+            // For other fields (social links, website, etc.), accept AI results
             result[key as keyof EnrichResult] = value as any;
           }
         }
