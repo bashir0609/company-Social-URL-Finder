@@ -860,7 +860,7 @@ export default async function handler(
 
     // Extract contact page first
     if (result.contact_page === 'Not found') {
-      const contactKeywords = ['contact', 'contact-us', 'contactus', 'get-in-touch', 'reach-us', 'about', 'about-us', 'connect'];
+      const contactKeywords = ['contact', 'contact-us', 'contactus', 'get-in-touch', 'reach-us', 'connect', 'contact-page'];
       
       $('a[href]').each((_, element) => {
         const href = $(element).attr('href');
