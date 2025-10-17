@@ -33,6 +33,7 @@ export default function Home() {
   const [method, setMethod] = useState<'extraction' | 'ai' | 'hybrid'>('extraction');
   const [customPrompt, setCustomPrompt] = useState('');
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [showApiKeys, setShowApiKeys] = useState(false);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<EnrichResult | null>(null);
   const [bulkResults, setBulkResults] = useState<EnrichResult[]>([]);
@@ -504,9 +505,23 @@ export default function Home() {
             </button>
           </div>
 
-          {/* API Key Configuration */}
-          <div className="bg-white rounded-lg shadow-md p-4 mb-6 max-w-2xl mx-auto">
-            <h3 className="text-sm font-semibold text-gray-700 mb-3">🔑 API Keys (Optional)</h3>
+          {/* API Key Configuration - Collapsible */}
+          <div className="bg-white rounded-lg shadow-md mb-6 max-w-2xl mx-auto">
+            <button
+              onClick={() => setShowApiKeys(!showApiKeys)}
+              className="w-full px-4 py-3 flex items-center justify-between text-left hover:bg-gray-50 transition-colors rounded-lg"
+            >
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-semibold text-gray-700">🔑 API Keys (Optional for AI Features)</span>
+                {(hasEnvKeys.openrouter || hasEnvKeys.gemini) && (
+                  <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full">✓ Configured</span>
+                )}
+              </div>
+              <span className="text-gray-400">{showApiKeys ? '▼' : '▶'}</span>
+            </button>
+            
+            {showApiKeys && (
+              <div className="px-4 pb-4 pt-2">
             
             {/* Environment Status */}
             {(hasEnvKeys.openrouter || hasEnvKeys.gemini) && (
@@ -576,58 +591,69 @@ export default function Home() {
 
             {!hasEnvKeys.openrouter && !hasEnvKeys.gemini && (
               <p className="text-xs text-gray-600 mt-3 p-2 bg-blue-50 rounded">
-                💡 <strong>Note:</strong> Keys are optional if set in environment variables. App works without keys using extraction method.
+                💡 <strong>Note:</strong> Keys are optional. App works without keys using extraction method.
               </p>
+            )}
+              </div>
             )}
           </div>
 
-          {/* Method Selection */}
-          <div className="bg-white rounded-lg shadow-md p-4 mb-6 max-w-2xl mx-auto">
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Search Method
+          {/* Method Selection - Simplified */}
+          <div className="bg-white rounded-lg shadow-md p-6 mb-6 max-w-2xl mx-auto">
+            <div className="mb-6">
+              <label className="block text-lg font-bold text-gray-800 mb-4">
+                Choose Search Method
               </label>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                <label className="flex items-center cursor-pointer p-3 border-2 rounded-lg hover:bg-gray-50 transition-colors" style={{ borderColor: method === 'extraction' ? '#3b82f6' : '#e5e7eb' }}>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <label className={`cursor-pointer p-4 border-2 rounded-xl hover:shadow-md transition-all ${
+                  method === 'extraction' ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-blue-300'
+                }`}>
                   <input
                     type="radio"
                     value="extraction"
                     checked={method === 'extraction'}
                     onChange={(e) => setMethod(e.target.value as 'extraction' | 'ai' | 'hybrid')}
-                    className="mr-3"
+                    className="sr-only"
                   />
-                  <div>
-                    <div className="text-sm font-bold">Extraction</div>
-                    <div className="text-xs text-gray-600">Fast web scraping</div>
-                    <div className="text-xs text-green-600">✓ No API key needed</div>
+                  <div className="text-center">
+                    <div className="text-2xl mb-2">⚡</div>
+                    <div className="font-bold text-gray-800 mb-1">Extraction</div>
+                    <div className="text-xs text-gray-600 mb-2">Fast & Free</div>
+                    <div className="text-xs text-green-600 font-medium">✓ No API key</div>
                   </div>
                 </label>
-                <label className="flex items-center cursor-pointer p-3 border-2 rounded-lg hover:bg-gray-50 transition-colors" style={{ borderColor: method === 'ai' ? '#3b82f6' : '#e5e7eb' }}>
+                <label className={`cursor-pointer p-4 border-2 rounded-xl hover:shadow-md transition-all ${
+                  method === 'ai' ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-blue-300'
+                }`}>
                   <input
                     type="radio"
                     value="ai"
                     checked={method === 'ai'}
                     onChange={(e) => setMethod(e.target.value as 'extraction' | 'ai' | 'hybrid')}
-                    className="mr-3"
+                    className="sr-only"
                   />
-                  <div>
-                    <div className="text-sm font-bold">AI Only</div>
-                    <div className="text-xs text-gray-600">Pure AI search</div>
-                    <div className="text-xs text-blue-600">⚡ Requires API key</div>
+                  <div className="text-center">
+                    <div className="text-2xl mb-2">🤖</div>
+                    <div className="font-bold text-gray-800 mb-1">AI Only</div>
+                    <div className="text-xs text-gray-600 mb-2">Intelligent</div>
+                    <div className="text-xs text-blue-600 font-medium">⚡ API key needed</div>
                   </div>
                 </label>
-                <label className="flex items-center cursor-pointer p-3 border-2 rounded-lg hover:bg-gray-50 transition-colors" style={{ borderColor: method === 'hybrid' ? '#3b82f6' : '#e5e7eb' }}>
+                <label className={`cursor-pointer p-4 border-2 rounded-xl hover:shadow-md transition-all ${
+                  method === 'hybrid' ? 'border-purple-500 bg-purple-50' : 'border-gray-200 hover:border-purple-300'
+                }`}>
                   <input
                     type="radio"
                     value="hybrid"
                     checked={method === 'hybrid'}
                     onChange={(e) => setMethod(e.target.value as 'extraction' | 'ai' | 'hybrid')}
-                    className="mr-3"
+                    className="sr-only"
                   />
-                  <div>
-                    <div className="text-sm font-bold">Hybrid</div>
-                    <div className="text-xs text-gray-600">AI + Extraction</div>
-                    <div className="text-xs text-purple-600">🚀 Best results</div>
+                  <div className="text-center">
+                    <div className="text-2xl mb-2">🚀</div>
+                    <div className="font-bold text-gray-800 mb-1">Hybrid</div>
+                    <div className="text-xs text-gray-600 mb-2">Best Quality</div>
+                    <div className="text-xs text-purple-600 font-medium">⭐ Recommended</div>
                   </div>
                 </label>
               </div>
@@ -734,13 +760,16 @@ export default function Home() {
               </div>
             )}
 
-            {/* Advanced Settings */}
-            <button
-              onClick={() => setShowAdvanced(!showAdvanced)}
-              className="text-sm text-primary hover:underline"
-            >
-              {showAdvanced ? '▼' : '▶'} Advanced Settings
-            </button>
+            {/* Advanced Settings - Collapsible */}
+            <div className="border-t pt-4 mt-4">
+              <button
+                onClick={() => setShowAdvanced(!showAdvanced)}
+                className="w-full flex items-center justify-between text-sm font-medium text-gray-700 hover:text-primary transition-colors"
+              >
+                <span>⚙️ Advanced Settings</span>
+                <span className="text-gray-400">{showAdvanced ? '▼' : '▶'}</span>
+              </button>
+            </div>
 
             {showAdvanced && (
               <div className="mt-4 space-y-4">

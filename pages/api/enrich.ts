@@ -146,7 +146,24 @@ function extractEmailAndPhone(html: string): { email: string; phone: string } {
       // Filter to get valid phone numbers (at least 10 digits)
       const validPhones = phones.filter((phone: string) => {
         const digitsOnly = phone.replace(/\D/g, '');
-        return digitsOnly.length >= 10 && digitsOnly.length <= 15;
+        
+        // Basic length check
+        if (digitsOnly.length < 10 || digitsOnly.length > 15) return false;
+        
+        // Filter out common fake/placeholder numbers
+        // 555 prefix (North American fake numbers)
+        if (digitsOnly.includes('555') && digitsOnly.match(/555\d{4}/)) return false;
+        
+        // Sequential numbers like 123456, 1234567890
+        if (/^(0123456789|1234567890|123456789|12345678|1234567|123456)/.test(digitsOnly)) return false;
+        
+        // Repeating patterns like 111111, 222222, 000000
+        if (/^(\d)\1{5,}$/.test(digitsOnly)) return false;
+        
+        // Common test numbers
+        if (digitsOnly === '0000000000' || digitsOnly === '1111111111') return false;
+        
+        return true;
       });
       
       if (validPhones.length > 0) {
