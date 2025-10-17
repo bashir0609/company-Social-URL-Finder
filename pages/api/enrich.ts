@@ -194,16 +194,18 @@ function extractKeywords(html: string): string[] {
   
   // Extract words and count frequency
   const words = text.split(' ').filter(word => {
-    // Filter criteria
-    if (word.length < 4) return false; // min 4 characters
+    // Basic length filters
+    if (word.length < 3) return false; // minimum 3 characters (allows mot, car, van, etc.)
     if (word.length > 20) return false; // max 20 characters (likely technical)
     if (stopWords.has(word)) return false;
+    
+    // Filter out pure numbers and technical codes
     if (/^\d+$/.test(word)) return false; // pure numbers
-    if (/^[a-z]\d+/.test(word)) return false; // technical codes like "a1", "x2"
+    if (/^[a-z]\d+$/.test(word)) return false; // technical codes like "a1", "x2"
     if (word.includes('_')) return false; // technical variables
     if (/\d{3,}/.test(word)) return false; // contains 3+ consecutive digits
     
-    // Must contain mostly letters
+    // Must be mostly letters (at least 70%)
     const letterCount = (word.match(/[a-z]/g) || []).length;
     if (letterCount < word.length * 0.7) return false;
     
@@ -216,11 +218,18 @@ function extractKeywords(html: string): string[] {
     wordCount[word] = (wordCount[word] || 0) + 1;
   });
   
-  // Sort by frequency and get top 15-20
+  // Sort by frequency and get top 25-30 keywords
   const sortedWords = Object.entries(wordCount)
-    .filter(([word, count]) => count >= 2) // Must appear at least twice
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 20)
+    .filter(([word, count]) => {
+      // 3-character words need at least 2 occurrences to be significant
+      // 4+ character words need at least 2 occurrences
+      if (word.length === 3) {
+        return count >= 2; // 3-char words must appear at least twice
+      }
+      return count >= 2; // all other words must appear at least twice
+    })
+    .sort((a, b) => b[1] - a[1]) // sort by frequency (most frequent first)
+    .slice(0, 30) // get top 30
     .map(([word]) => word);
   
   return sortedWords;
