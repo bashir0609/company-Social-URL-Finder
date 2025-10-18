@@ -283,8 +283,10 @@ export default function Home() {
         setTimeout(() => setSearchProgress('📋 Step 1: Crawling menu links...'), 2000);
         setTimeout(() => setSearchProgress('🔍 Step 2: Identifying important pages...'), 4000);
         setTimeout(() => setSearchProgress('📄 Step 3: Scraping contact, about, privacy pages...'), 6000);
-        setTimeout(() => setSearchProgress('🔗 Extracting social links and contact info...'), 8000);
-        setTimeout(() => setSearchProgress('✅ Processing results...'), 10000);
+        setTimeout(() => setSearchProgress('🔗 Step 4: Extracting social links and contact info...'), 8000);
+        setTimeout(() => setSearchProgress('🔎 Step 5: Searching for missing social profiles...'), 10000);
+        setTimeout(() => setSearchProgress('📊 Finalizing keywords and data...'), 12000);
+        setTimeout(() => setSearchProgress('✅ Processing results...'), 14000);
       } else {
         setTimeout(() => setSearchProgress('🤖 AI analyzing company...'), 500);
         setTimeout(() => setSearchProgress('🌐 Finding website...'), 2000);
