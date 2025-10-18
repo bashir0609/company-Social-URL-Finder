@@ -977,6 +977,27 @@ async function comprehensiveExtraction(website: string): Promise<{
       }
     }
 
+    // STEP 1.5: Extract social links from homepage FIRST (including footer)
+    console.log('Step 1.5: Extracting social links from homepage...');
+    const homepageSocialLinks = extractSocialLinks(homeHtml, actualHomepage);
+    for (const [platform, url] of Object.entries(homepageSocialLinks)) {
+      if (!result.socialLinks[platform]) {
+        result.socialLinks[platform] = url;
+        console.log(`Found ${platform} on homepage: ${url}`);
+      }
+    }
+    
+    // Also extract contact info from homepage
+    const homepageContactInfo = extractEmailAndPhone(homeHtml);
+    if (homepageContactInfo.email !== 'Not found') {
+      result.contactInfo.email = homepageContactInfo.email;
+      console.log(`Found email on homepage: ${homepageContactInfo.email}`);
+    }
+    if (homepageContactInfo.phone !== 'Not found') {
+      result.contactInfo.phone = homepageContactInfo.phone;
+      console.log(`Found phone on homepage: ${homepageContactInfo.phone}`);
+    }
+
     const menuLinks: string[] = [];
     const importantKeywords = {
       contact: ['contact', 'contact-us', 'contactus', 'get-in-touch', 'reach-us', 'connect'],
@@ -985,8 +1006,8 @@ async function comprehensiveExtraction(website: string): Promise<{
       terms: ['terms', 'terms-conditions', 'terms-of-service', 'tos'],
     };
 
-    // Extract all navigation links
-    $('nav a[href], header a[href], .menu a[href], .navigation a[href]').each((_, element) => {
+    // Extract all navigation and footer links
+    $('nav a[href], header a[href], footer a[href], .menu a[href], .navigation a[href], .footer a[href]').each((_, element) => {
       const href = $(element).attr('href');
       if (href) {
         let fullUrl = href;
