@@ -61,6 +61,9 @@ export default function Home() {
   const [hasEnvKeys, setHasEnvKeys] = useState({ openrouter: false, gemini: false });
   const [availableColumns, setAvailableColumns] = useState<string[]>([]);
   const [selectedColumn, setSelectedColumn] = useState<string>('');
+  const [bulkProcessing, setBulkProcessing] = useState(false);
+  const [bulkProgressLog, setBulkProgressLog] = useState<string[]>([]);
+  const [abortController, setAbortController] = useState<AbortController | null>(null);
 
   // Load recent searches, dark mode, and visitor stats from localStorage
   useEffect(() => {
@@ -412,10 +415,15 @@ export default function Home() {
     console.log('Selected column:', selectedColumn);
     console.log('File:', bulkFile.name);
     
-    // Clear previous errors
+    // Clear previous errors and setup abort controller
     setErrorMessage('');
     setBulkResults([]);
     setBulkProgress(0);
+    setBulkProgressLog([]);
+    setBulkProcessing(true);
+    
+    const controller = new AbortController();
+    setAbortController(controller);
 
     // Validate AI method requirements for bulk processing
     if (method === 'ai' || method === 'hybrid') {
@@ -505,10 +513,22 @@ export default function Home() {
   const processBulkCompanies = async (companies: string[]) => {
     const results: EnrichResult[] = [];
     
+    setBulkProgressLog(prev => [...prev, `📊 Starting bulk enrichment for ${companies.length} companies...`]);
+    
     for (let i = 0; i < companies.length; i++) {
+      // Check if aborted
+      if (abortController?.signal.aborted) {
+        setBulkProgressLog(prev => [...prev, `⛔ Processing stopped by user at ${i}/${companies.length}`]);
+        setBulkProcessing(false);
+        return;
+      }
+      
+      const company = companies[i];
+      setBulkProgressLog(prev => [...prev, `\n🔍 [${i + 1}/${companies.length}] Processing: ${company}`]);
+      
       try {
         const response = await axios.post<EnrichResult>('/api/enrich', {
-          company: companies[i],
+          company: company,
           method: method,
           aiProvider: aiProvider,
           apiKey: apiKey || undefined,
@@ -517,10 +537,24 @@ export default function Home() {
           platforms: selectedPlatforms,
           model: selectedModel,
         });
+        
         results.push(response.data);
+        
+        // Log what was found
+        if (response.data.website) {
+          setBulkProgressLog(prev => [...prev, `   ✅ Found website: ${response.data.website}`]);
+        }
+        if (response.data.email !== 'Not found') {
+          setBulkProgressLog(prev => [...prev, `   📧 Found email: ${response.data.email}`]);
+        }
+        if (response.data.linkedin !== 'Not found') {
+          setBulkProgressLog(prev => [...prev, `   🔗 Found LinkedIn: ${response.data.linkedin}`]);
+        }
+        
       } catch (error) {
+        setBulkProgressLog(prev => [...prev, `   ❌ Error processing ${company}`]);
         results.push({
-          company_name: companies[i],
+          company_name: company,
           website: '',
           contact_page: 'Not found',
           email: 'Not found',
@@ -540,6 +574,10 @@ export default function Home() {
       setBulkProgress(((i + 1) / companies.length) * 100);
       setBulkResults([...results]);
     }
+    
+    setBulkProgressLog(prev => [...prev, `\n✅ Bulk enrichment completed! Processed ${companies.length} companies.`]);
+    setBulkProcessing(false);
+    setAbortController(null);
   };
 
   const downloadResults = () => {
@@ -1358,13 +1396,25 @@ export default function Home() {
                     </div>
                   )}
                   
-                  <button
-                    onClick={processBulkFile}
-                    disabled={!selectedColumn || (bulkProgress > 0 && bulkProgress < 100)}
-                    className="px-6 py-3 bg-primary text-white rounded-lg font-medium hover:bg-blue-600 disabled:bg-gray-300 disabled:cursor-not-allowed"
-                  >
-                    {bulkProgress > 0 && bulkProgress < 100 ? 'Processing...' : 'Start Bulk Enrichment'}
-                  </button>
+                  <div className="flex gap-3">
+                    <button
+                      onClick={processBulkFile}
+                      disabled={!selectedColumn || bulkProcessing}
+                      className="px-6 py-3 bg-primary text-white rounded-lg font-medium hover:bg-blue-600 disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center gap-2"
+                    >
+                      {bulkProcessing ? 'Processing...' : 'Start Bulk Enrichment'}
+                    </button>
+                    
+                    {bulkProcessing && (
+                      <button
+                        onClick={() => abortController?.abort()}
+                        className="px-6 py-3 bg-red-600 text-white rounded-lg font-medium hover:bg-red-700 flex items-center gap-2"
+                      >
+                        <X className="w-4 h-4" />
+                        Stop
+                      </button>
+                    )}
+                  </div>
                 </div>
               )}
 
@@ -1379,6 +1429,25 @@ export default function Home() {
                   <p className="text-sm text-gray-600 mt-2">
                     Progress: {Math.round(bulkProgress)}%
                   </p>
+                </div>
+              )}
+
+              {bulkProgressLog.length > 0 && (
+                <div className="mb-6 bg-gray-900 text-gray-100 p-4 rounded-lg max-h-96 overflow-y-auto font-mono text-xs">
+                  <div className="flex justify-between items-center mb-2">
+                    <h3 className="font-semibold text-sm">📋 Processing Log</h3>
+                    <button
+                      onClick={() => setBulkProgressLog([])}
+                      className="text-gray-400 hover:text-white text-xs"
+                    >
+                      Clear
+                    </button>
+                  </div>
+                  {bulkProgressLog.map((log, index) => (
+                    <div key={index} className="py-0.5 whitespace-pre-wrap">
+                      {log}
+                    </div>
+                  ))}
                 </div>
               )}
 
