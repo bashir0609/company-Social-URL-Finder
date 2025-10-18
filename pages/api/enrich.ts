@@ -528,20 +528,16 @@ function extractSocialLinks(html: string, baseUrl: string): Record<string, strin
     
     if (!lowerUrl.includes(pattern)) return null;
     
-    // Check if URL has content after the platform domain
-    const urlParts = cleanUrl.split(pattern);
-    if (urlParts.length > 1 && urlParts[1].length > 1) {
-      const pathAfterDomain = urlParts[1];
-      // Exclude generic pages
-      if (!pathAfterDomain.startsWith('search') && 
-          !pathAfterDomain.startsWith('login') && 
-          !pathAfterDomain.startsWith('signup') &&
-          !pathAfterDomain.startsWith('privacy') &&
-          !pathAfterDomain.startsWith('terms')) {
-        return cleanUrl;
+    // Very lenient validation - just check it's not a generic page
+    const excludePatterns = ['/search', '/login', '/signup', '/privacy', '/terms', '/about/terms', '/about/privacy'];
+    for (const exclude of excludePatterns) {
+      if (lowerUrl.includes(exclude)) {
+        return null;
       }
     }
-    return null;
+    
+    // Accept any URL that contains the platform domain
+    return cleanUrl;
   };
   
   // Method 1: Extract from all <a> tags
