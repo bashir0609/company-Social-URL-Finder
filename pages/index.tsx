@@ -526,6 +526,23 @@ export default function Home() {
       const company = companies[i];
       setBulkProgressLog(prev => [...prev, `\n🔍 [${i + 1}/${companies.length}] Processing: ${company}`]);
       
+      // Show extraction steps based on method
+      if (method === 'extraction' || method === 'hybrid') {
+        setBulkProgressLog(prev => [...prev, `   🌐 Finding website...`]);
+        await new Promise(resolve => setTimeout(resolve, 100));
+        setBulkProgressLog(prev => [...prev, `   📋 Crawling menu links...`]);
+        await new Promise(resolve => setTimeout(resolve, 100));
+        setBulkProgressLog(prev => [...prev, `   🔍 Identifying important pages (contact, about, privacy)...`]);
+        await new Promise(resolve => setTimeout(resolve, 100));
+        setBulkProgressLog(prev => [...prev, `   📄 Scraping multiple pages...`]);
+        await new Promise(resolve => setTimeout(resolve, 100));
+        setBulkProgressLog(prev => [...prev, `   🔗 Extracting social links and contact info...`]);
+      } else if (method === 'ai') {
+        setBulkProgressLog(prev => [...prev, `   🤖 AI analyzing company...`]);
+        await new Promise(resolve => setTimeout(resolve, 100));
+        setBulkProgressLog(prev => [...prev, `   🔍 Searching social profiles...`]);
+      }
+      
       try {
         const response = await axios.post<EnrichResult>('/api/enrich', {
           company: company,
@@ -549,6 +566,9 @@ export default function Home() {
         }
         if (response.data.linkedin !== 'Not found') {
           setBulkProgressLog(prev => [...prev, `   🔗 Found LinkedIn: ${response.data.linkedin}`]);
+        }
+        if (response.data.contact_page !== 'Not found') {
+          setBulkProgressLog(prev => [...prev, `   📞 Found contact page: ${response.data.contact_page}`]);
         }
         
       } catch (error) {
