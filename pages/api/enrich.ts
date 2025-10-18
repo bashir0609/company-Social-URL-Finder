@@ -198,15 +198,28 @@ function extractEmailAndPhone(html: string): { email: string; phone: string } {
   if (result.phone === 'Not found') {
     // Look in specific areas first
     const targetAreas = $('footer, .contact, .footer, #contact, #footer, [class*="contact"], [class*="footer"], [class*="phone"], [class*="hotline"]').text();
-    // Improved phone regex to match more formats including German format with parentheses and slashes
-    // Matches: +49 (0) 79 59/24 64, +1-234-567-8900, (123) 456-7890, etc.
-    const phoneRegex = /(\+?\d{1,4}[\s.-]?)?\(?\d{1,4}\)?[\s.-\/]?\d{1,4}[\s.-\/]?\d{1,4}[\s.-\/]?\d{0,4}[\s.-\/]?\d{0,4}/g;
-    let phones = targetAreas.match(phoneRegex);
+    // Multiple phone regex patterns to match various international formats
+    const phonePatterns = [
+      /(\+?\d{1,3}[-.\s]?)?\(?\d{2,3}?\)?[-.\s]?\d{3}[-.\s]?\d{4}/g,  // +1-234-567-8900, (123) 456-7890
+      /\d{2,3}[-.\s]?\d{3}[-.\s]?\d{4}/g,  // 123-456-7890
+      /\d{4}[-.\s]?\d{3}[-.\s]?\d{3}/g,  // 1234-567-890
+      /(\+\d{1,3}[- ]?)?\(?\d{1,4}?\)?[- ]?\d{1,4}[- ]?\d{1,4}[- ]?\d{1,4}/g,  // International formats
+      /(\+?\d{1,4}[\s.-]?)?\(?\d{1,4}\)?[\s.-\/]?\d{1,4}[\s.-\/]?\d{1,4}[\s.-\/]?\d{0,4}[\s.-\/]?\d{0,4}/g,  // German format with slashes
+    ];
+    
+    let phones: string[] = [];
+    for (const pattern of phonePatterns) {
+      const matches = targetAreas.match(pattern);
+      if (matches) phones.push(...matches);
+    }
     
     // If not found in targeted areas, search entire body
     if (!phones || phones.length === 0) {
       const bodyText = $('body').text();
-      phones = bodyText.match(phoneRegex);
+      for (const pattern of phonePatterns) {
+        const matches = bodyText.match(pattern);
+        if (matches) phones.push(...matches);
+      }
     }
     
     if (phones && phones.length > 0) {
