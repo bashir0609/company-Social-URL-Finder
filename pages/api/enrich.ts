@@ -31,28 +31,92 @@ interface EnrichResult {
   status: string;
 }
 
+// Multiple user agents to rotate through for better success rate
+const USER_AGENTS = [
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0',
+  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.1 Safari/605.1.15',
+];
+
 async function fetchPageContent(url: string, retries = 3): Promise<string | null> {
+  let userAgent = USER_AGENTS[0]; // Default user agent
+  
   for (let attempt = 0; attempt < retries; attempt++) {
     try {
+      // Rotate user agents for better success rate
+      userAgent = USER_AGENTS[attempt % USER_AGENTS.length];
+      
       const response = await axios.get(url, {
-        timeout: 25000, // Increased timeout
+        timeout: 30000, // 30 second timeout
         headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-          'Accept-Language': 'en-US,en;q=0.9',
+          'User-Agent': userAgent,
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+          'Accept-Language': 'en-US,en;q=0.9,de;q=0.8,fr;q=0.7,es;q=0.6',
           'Accept-Encoding': 'gzip, deflate, br',
           'Connection': 'keep-alive',
           'Upgrade-Insecure-Requests': '1',
+          'Sec-Fetch-Dest': 'document',
+          'Sec-Fetch-Mode': 'navigate',
+          'Sec-Fetch-Site': 'none',
+          'Cache-Control': 'max-age=0',
         },
-        maxRedirects: 5,
-        validateStatus: (status) => status < 400,
+        maxRedirects: 10, // Allow more redirects
+        validateStatus: (status) => status < 500, // Accept 4xx errors, retry only on 5xx
+        decompress: true, // Auto decompress gzip/deflate
       });
-      return response.data;
+      
+      // Check if we got valid HTML content
+      if (response.data && typeof response.data === 'string' && response.data.length > 100) {
+        return response.data;
+      }
+      
+      console.log(`Attempt ${attempt + 1}: Got response but content too short or invalid`);
+      
     } catch (error: any) {
-      console.error(`Error fetching ${url} (attempt ${attempt + 1}/${retries}):`, error.message);
+      const errorMsg = error.response?.status 
+        ? `HTTP ${error.response.status}` 
+        : error.code === 'ECONNABORTED' 
+        ? 'Timeout' 
+        : error.code || error.message;
+      
+      console.error(`Error fetching ${url} (attempt ${attempt + 1}/${retries}): ${errorMsg}`);
+      
+      // If it's a 404 or 403, don't retry
+      if (error.response?.status === 404 || error.response?.status === 403) {
+        console.log('Got 404/403, trying with www/non-www variant...');
+        
+        // Try alternate URL (add/remove www)
+        try {
+          const urlObj = new URL(url);
+          const altUrl = urlObj.hostname.startsWith('www.') 
+            ? url.replace('www.', '')
+            : url.replace('://', '://www.');
+          
+          if (altUrl !== url) {
+            console.log(`Trying alternate URL: ${altUrl}`);
+            const altResponse = await axios.get(altUrl, {
+              timeout: 30000,
+              headers: { 'User-Agent': userAgent },
+              maxRedirects: 10,
+              validateStatus: (status) => status < 500,
+            });
+            if (altResponse.data && typeof altResponse.data === 'string') {
+              return altResponse.data;
+            }
+          }
+        } catch (altError) {
+          console.log('Alternate URL also failed');
+        }
+        
+        return null; // Don't retry 404/403
+      }
+      
       if (attempt < retries - 1) {
-        // Exponential backoff: wait 1s, 2s, 4s
-        await new Promise(resolve => setTimeout(resolve, Math.pow(2, attempt) * 1000));
+        // Exponential backoff: wait 2s, 4s, 8s
+        const waitTime = Math.pow(2, attempt + 1) * 1000;
+        console.log(`Waiting ${waitTime}ms before retry...`);
+        await new Promise(resolve => setTimeout(resolve, waitTime));
       }
     }
   }
