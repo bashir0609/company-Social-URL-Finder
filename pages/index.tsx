@@ -408,6 +408,15 @@ export default function Home() {
   const processBulkFile = async () => {
     if (!bulkFile) return;
 
+    console.log('Starting bulk processing...');
+    console.log('Selected column:', selectedColumn);
+    console.log('File:', bulkFile.name);
+    
+    // Clear previous errors
+    setErrorMessage('');
+    setBulkResults([]);
+    setBulkProgress(0);
+
     // Validate AI method requirements for bulk processing
     if (method === 'ai' || method === 'hybrid') {
       if (aiProvider === 'openrouter') {
@@ -435,10 +444,15 @@ export default function Home() {
     let companies: string[] = [];
 
     if (fileExtension === 'csv') {
+      console.log('Parsing CSV file...');
       Papa.parse(bulkFile, {
         header: true,
         complete: async (results) => {
+          console.log('CSV parsed successfully');
           const data = results.data as any[];
+          console.log('Data rows:', data.length);
+          console.log('First row:', data[0]);
+          
           // Use selected column or try to find company column
           const companyCol = selectedColumn || Object.keys(data[0] || {}).find(key => 
             key.toLowerCase().includes('company') || 
@@ -446,13 +460,21 @@ export default function Home() {
             key.toLowerCase().includes('domain')
           );
           
+          console.log('Using column:', companyCol);
+          
           if (companyCol) {
             companies = data.map(row => row[companyCol]).filter(Boolean);
+            console.log('Companies to process:', companies);
             await processBulkCompanies(companies);
           } else {
+            console.error('No valid column found');
             setErrorMessage('❌ Please select a column containing company names or domains.');
           }
         },
+        error: (error) => {
+          console.error('CSV parsing error:', error);
+          setErrorMessage('❌ Error parsing CSV file: ' + error.message);
+        }
       });
     } else if (fileExtension === 'xlsx' || fileExtension === 'xls') {
       const reader = new FileReader();
