@@ -131,9 +131,10 @@ function extractEmailAndPhone(html: string): { email: string; phone: string } {
   // 2. Search in HTML content (more targeted)
   if (result.phone === 'Not found') {
     // Look in specific areas first
-    const targetAreas = $('footer, .contact, .footer, #contact, #footer, [class*="contact"], [class*="footer"], [class*="phone"]').text();
-    // Improved phone regex to match more formats
-    const phoneRegex = /(\+?\d{1,4}[\s.-]?)?\(?\d{2,4}\)?[\s.-]?\d{2,4}[\s.-]?\d{2,4}[\s.-]?\d{0,4}/g;
+    const targetAreas = $('footer, .contact, .footer, #contact, #footer, [class*="contact"], [class*="footer"], [class*="phone"], [class*="hotline"]').text();
+    // Improved phone regex to match more formats including German format with parentheses and slashes
+    // Matches: +49 (0) 79 59/24 64, +1-234-567-8900, (123) 456-7890, etc.
+    const phoneRegex = /(\+?\d{1,4}[\s.-]?)?\(?\d{1,4}\)?[\s.-\/]?\d{1,4}[\s.-\/]?\d{1,4}[\s.-\/]?\d{0,4}[\s.-\/]?\d{0,4}/g;
     let phones = targetAreas.match(phoneRegex);
     
     // If not found in targeted areas, search entire body
