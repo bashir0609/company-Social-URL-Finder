@@ -642,6 +642,142 @@ function normalizeUrl(url: string): string {
   return url;
 }
 
+// Multi-step comprehensive extraction
+async function comprehensiveExtraction(website: string): Promise<{
+  socialLinks: Record<string, string>;
+  contactInfo: { email: string; phone: string };
+  contactPage: string;
+  allPages: string[];
+}> {
+  const result = {
+    socialLinks: {} as Record<string, string>,
+    contactInfo: { email: 'Not found', phone: 'Not found' },
+    contactPage: 'Not found',
+    allPages: [] as string[],
+  };
+
+  try {
+    // STEP 1: Crawl menu links from homepage
+    console.log('Step 1: Crawling menu links from homepage...');
+    const homeHtml = await fetchPageContent(website);
+    if (!homeHtml) return result;
+
+    const $ = cheerio.load(homeHtml);
+    const menuLinks: string[] = [];
+    const importantKeywords = {
+      contact: ['contact', 'contact-us', 'contactus', 'get-in-touch', 'reach-us', 'connect'],
+      about: ['about', 'about-us', 'aboutus', 'who-we-are', 'our-story', 'company'],
+      privacy: ['privacy', 'privacy-policy', 'privacypolicy'],
+      terms: ['terms', 'terms-conditions', 'terms-of-service', 'tos'],
+    };
+
+    // Extract all navigation links
+    $('nav a[href], header a[href], .menu a[href], .navigation a[href]').each((_, element) => {
+      const href = $(element).attr('href');
+      if (href) {
+        let fullUrl = href;
+        if (href.startsWith('/')) {
+          fullUrl = new URL(href, website).toString();
+        } else if (!href.startsWith('http')) {
+          try {
+            fullUrl = new URL(href, website).toString();
+          } catch {
+            return;
+          }
+        }
+        
+        // Only include links from same domain
+        try {
+          const linkDomain = new URL(fullUrl).hostname;
+          const siteDomain = new URL(website).hostname;
+          if (linkDomain === siteDomain && !menuLinks.includes(fullUrl)) {
+            menuLinks.push(fullUrl);
+          }
+        } catch {
+          // Invalid URL, skip
+        }
+      }
+    });
+
+    // STEP 2: Identify and scrape important pages
+    console.log(`Step 2: Found ${menuLinks.length} menu links, identifying important pages...`);
+    const pagesToScrape: { url: string; type: string }[] = [
+      { url: website, type: 'home' },
+    ];
+
+    // Categorize links
+    for (const link of menuLinks) {
+      const lowerLink = link.toLowerCase();
+      
+      // Check for contact page
+      if (importantKeywords.contact.some(kw => lowerLink.includes(kw))) {
+        pagesToScrape.push({ url: link, type: 'contact' });
+        if (result.contactPage === 'Not found') {
+          result.contactPage = link;
+        }
+      }
+      // Check for about page
+      else if (importantKeywords.about.some(kw => lowerLink.includes(kw))) {
+        pagesToScrape.push({ url: link, type: 'about' });
+      }
+      // Check for privacy page
+      else if (importantKeywords.privacy.some(kw => lowerLink.includes(kw))) {
+        pagesToScrape.push({ url: link, type: 'privacy' });
+      }
+      // Check for terms page
+      else if (importantKeywords.terms.some(kw => lowerLink.includes(kw))) {
+        pagesToScrape.push({ url: link, type: 'terms' });
+      }
+    }
+
+    // Limit to max 5 pages to avoid timeout
+    const limitedPages = pagesToScrape.slice(0, 5);
+    console.log(`Step 3: Scraping ${limitedPages.length} important pages...`);
+
+    // STEP 3: Scrape each important page
+    for (const page of limitedPages) {
+      try {
+        console.log(`Scraping ${page.type} page: ${page.url}`);
+        const pageHtml = await fetchPageContent(page.url, 2);
+        if (!pageHtml) continue;
+
+        result.allPages.push(page.url);
+
+        // Extract social links
+        const pageSocialLinks = extractSocialLinks(pageHtml, page.url);
+        for (const [platform, url] of Object.entries(pageSocialLinks)) {
+          if (!result.socialLinks[platform]) {
+            result.socialLinks[platform] = url;
+            console.log(`Found ${platform} on ${page.type} page: ${url}`);
+          }
+        }
+
+        // Extract contact info
+        const pageContactInfo = extractEmailAndPhone(pageHtml);
+        if (result.contactInfo.email === 'Not found' && pageContactInfo.email !== 'Not found') {
+          result.contactInfo.email = pageContactInfo.email;
+          console.log(`Found email on ${page.type} page: ${pageContactInfo.email}`);
+        }
+        if (result.contactInfo.phone === 'Not found' && pageContactInfo.phone !== 'Not found') {
+          result.contactInfo.phone = pageContactInfo.phone;
+          console.log(`Found phone on ${page.type} page: ${pageContactInfo.phone}`);
+        }
+
+        // Small delay to avoid overwhelming the server
+        await new Promise(resolve => setTimeout(resolve, 500));
+      } catch (error) {
+        console.error(`Error scraping ${page.type} page:`, error);
+      }
+    }
+
+    console.log('Comprehensive extraction completed');
+    return result;
+  } catch (error) {
+    console.error('Comprehensive extraction error:', error);
+    return result;
+  }
+}
+
 async function findCompanyWebsite(companyName: string): Promise<string> {
   const cleanName = companyName.trim().toLowerCase();
   const nameVariations = [
@@ -670,30 +806,28 @@ async function findCompanyWebsite(companyName: string): Promise<string> {
     const url = normalizeUrl(pattern);
     try {
       const response = await axios.head(url, { 
-        timeout: 8000,
+        timeout: 10000,
         maxRedirects: 5,
-        validateStatus: (status) => status < 400,
+        validateStatus: (status) => status >= 200 && status < 400,
       });
-      if (response.status === 200) {
+      if (response.status >= 200 && response.status < 300) {
         console.log(`Found website: ${url}`);
         return url;
       }
     } catch (error: any) {
-      // Try GET if HEAD fails (some servers block HEAD)
-      if (error.response?.status === 405 || error.code === 'ECONNRESET') {
-        try {
-          const getResponse = await axios.get(url, { 
-            timeout: 8000,
-            maxRedirects: 5,
-            validateStatus: (status) => status < 400,
-          });
-          if (getResponse.status === 200) {
-            console.log(`Found website (via GET): ${url}`);
-            return url;
-          }
-        } catch {
-          continue;
+      // Try GET if HEAD fails (some servers block HEAD or have issues)
+      try {
+        const getResponse = await axios.get(url, { 
+          timeout: 10000,
+          maxRedirects: 5,
+          validateStatus: (status) => status >= 200 && status < 400,
+        });
+        if (getResponse.status >= 200 && getResponse.status < 300) {
+          console.log(`Found website (via GET): ${url}`);
+          return url;
         }
+      } catch {
+        continue;
       }
       continue;
     }
@@ -874,86 +1008,44 @@ export default async function handler(
 
     result.website = website;
 
-    // Fetch website content
-    const html = await fetchPageContent(website);
+    // Use comprehensive multi-step extraction
+    console.log('Starting comprehensive extraction...');
+    const extracted = await comprehensiveExtraction(website);
     
-    if (!html) {
-      result.status = 'Failed: Could not fetch website';
-      return res.status(200).json(result);
+    // Apply extracted data to result
+    if (extracted.contactPage !== 'Not found') {
+      result.contact_page = extracted.contactPage;
     }
-
-    // Load HTML once for all extractions
-    const $ = cheerio.load(html);
-
-    // Extract contact page first
-    if (result.contact_page === 'Not found') {
-      const contactKeywords = ['contact', 'contact-us', 'contactus', 'get-in-touch', 'reach-us', 'connect', 'contact-page'];
-      
-      $('a[href]').each((_, element) => {
-        const href = $(element).attr('href');
-        if (!href) return;
-        
-        const lowerHref = href.toLowerCase();
-        for (const keyword of contactKeywords) {
-          if (lowerHref.includes(keyword)) {
-            let contactUrl = href;
-            if (href.startsWith('/')) {
-              contactUrl = new URL(href, website).toString();
-            } else if (!href.startsWith('http')) {
-              contactUrl = new URL(href, website).toString();
-            }
-            result.contact_page = contactUrl;
-            return false; // break
-          }
-        }
-      });
+    
+    if (extracted.contactInfo.email !== 'Not found') {
+      result.email = extracted.contactInfo.email;
     }
-
-    // Scrape contact page for additional social links and contact info
-    if (result.contact_page !== 'Not found') {
-      try {
-        const contactHtml = await fetchPageContent(result.contact_page, 2);
-        if (contactHtml) {
-          const contactSocialLinks = extractSocialLinks(contactHtml, result.contact_page);
-          // Merge contact page social links (don't overwrite existing)
-          for (const [platform, url] of Object.entries(contactSocialLinks)) {
-            if (platform in result && result[platform as keyof EnrichResult] === 'Not found') {
-              result[platform as keyof EnrichResult] = url as any;
-              console.log(`Found ${platform} on contact page: ${url}`);
-            }
-          }
-          
-          // Extract additional contact info from contact page
-          const contactInfo = extractEmailAndPhone(contactHtml);
-          if (result.email === 'Not found' && contactInfo.email !== 'Not found') {
-            result.email = contactInfo.email;
-            console.log(`Found email on contact page: ${contactInfo.email}`);
-          }
-          if (result.phone === 'Not found' && contactInfo.phone !== 'Not found') {
-            result.phone = contactInfo.phone;
-            console.log(`Found phone on contact page: ${contactInfo.phone}`);
-          }
-        }
-      } catch (error) {
-        console.error('Error scraping contact page:', error);
+    
+    if (extracted.contactInfo.phone !== 'Not found') {
+      result.phone = extracted.contactInfo.phone;
+    }
+    
+    // Apply social links from comprehensive extraction
+    for (const [platform, url] of Object.entries(extracted.socialLinks)) {
+      if (platform in result && result[platform as keyof EnrichResult] === 'Not found') {
+        result[platform as keyof EnrichResult] = url as any;
       }
     }
-
-    // Extract email and phone (only if not already found by AI)
-    if (result.email === 'Not found' || result.phone === 'Not found') {
-      const contactInfo = extractEmailAndPhone(html);
-      if (result.email === 'Not found') result.email = contactInfo.email;
-      if (result.phone === 'Not found') result.phone = contactInfo.phone;
-      console.log(`Extracted contact info for ${company}: email=${contactInfo.email}, phone=${contactInfo.phone}`);
-    }
-
-    // Extract social links (only for platforms not found by AI)
-    const socialLinks = extractSocialLinks(html, website);
     
-    // Update result with found links (don't overwrite AI results)
-    for (const [platform, url] of Object.entries(socialLinks)) {
-      if (platform in result && platform !== 'keywords' && result[platform as keyof EnrichResult] === 'Not found') {
-        result[platform as keyof EnrichResult] = url as any;
+    // Extract keywords from homepage
+    const homeHtml = await fetchPageContent(website);
+    if (homeHtml) {
+      const extractedKeywords = extractKeywords(homeHtml);
+      
+      // Handle keywords based on method
+      if (method === 'hybrid' && result.keywords && result.keywords.length > 0) {
+        // Hybrid: Combine AI-generated and extracted keywords, remove duplicates
+        const aiKeywords = result.keywords;
+        const combined = [...aiKeywords, ...extractedKeywords];
+        result.keywords = Array.from(new Set(combined)).slice(0, 20); // Keep unique, max 20
+      } else {
+        // Extraction method: Use extracted keywords only
+        result.keywords = extractedKeywords;
       }
     }
 
@@ -968,20 +1060,6 @@ export default async function handler(
           console.log(`Found ${platform} via direct search: ${foundUrl}`);
         }
       }
-    }
-
-    // Extract keywords from website
-    const extractedKeywords = extractKeywords(html);
-    
-    // Handle keywords based on method
-    if (method === 'hybrid' && result.keywords && result.keywords.length > 0) {
-      // Hybrid: Combine AI-generated and extracted keywords, remove duplicates
-      const aiKeywords = result.keywords;
-      const combined = [...aiKeywords, ...extractedKeywords];
-      result.keywords = Array.from(new Set(combined)).slice(0, 20); // Keep unique, max 20
-    } else {
-      // Extraction method: Use extracted keywords only
-      result.keywords = extractedKeywords;
     }
 
     // Set status based on method used
