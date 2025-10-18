@@ -527,6 +527,20 @@ export default function Home() {
       setBulkProgressLog(prev => [...prev, `\n🔍 [${i + 1}/${companies.length}] Processing: ${company}`]);
       
       // Show extraction steps based on method
+      if (method === 'ai' || method === 'hybrid') {
+        setBulkProgressLog(prev => [...prev, `   🤖 AI Method: ${aiProvider === 'openrouter' ? 'OpenRouter' : 'Google Gemini'}`]);
+        if (aiProvider === 'openrouter' && selectedModel) {
+          setBulkProgressLog(prev => [...prev, `   🎯 Model: ${selectedModel}`]);
+        }
+        if (customPrompt) {
+          setBulkProgressLog(prev => [...prev, `   📝 Using custom prompt: "${customPrompt.substring(0, 50)}${customPrompt.length > 50 ? '...' : ''}"`]);
+        } else {
+          setBulkProgressLog(prev => [...prev, `   📝 Using default prompt`]);
+        }
+        setBulkProgressLog(prev => [...prev, `   🤖 Sending request to AI...`]);
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+      
       if (method === 'extraction' || method === 'hybrid') {
         setBulkProgressLog(prev => [...prev, `   🌐 Finding website...`]);
         await new Promise(resolve => setTimeout(resolve, 100));
@@ -537,10 +551,6 @@ export default function Home() {
         setBulkProgressLog(prev => [...prev, `   📄 Scraping multiple pages...`]);
         await new Promise(resolve => setTimeout(resolve, 100));
         setBulkProgressLog(prev => [...prev, `   🔗 Extracting social links and contact info...`]);
-      } else if (method === 'ai') {
-        setBulkProgressLog(prev => [...prev, `   🤖 AI analyzing company...`]);
-        await new Promise(resolve => setTimeout(resolve, 100));
-        setBulkProgressLog(prev => [...prev, `   🔍 Searching social profiles...`]);
       }
       
       try {
