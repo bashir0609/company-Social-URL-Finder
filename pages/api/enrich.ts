@@ -531,6 +531,7 @@ Return ONLY the JSON object. NO explanations, NO markdown formatting.`;
 }
 
 function extractSocialLinks(html: string, baseUrl: string): Record<string, string> {
+  console.log(`🔍 extractSocialLinks called for: ${baseUrl}`);
   const $ = cheerio.load(html);
   const socialLinks: Record<string, string> = {};
   
@@ -545,10 +546,12 @@ function extractSocialLinks(html: string, baseUrl: string): Record<string, strin
     const excludePatterns = ['/search', '/login', '/signup', '/privacy', '/terms', '/about/terms', '/about/privacy'];
     for (const exclude of excludePatterns) {
       if (lowerUrl.includes(exclude)) {
+        console.log(`❌ Excluded ${url} (matches ${exclude})`);
         return null;
       }
     }
     
+    console.log(`✅ Validated: ${cleanUrl}`);
     // Accept any URL that contains the platform domain
     return cleanUrl;
   };
