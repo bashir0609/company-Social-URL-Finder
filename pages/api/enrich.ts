@@ -589,6 +589,127 @@ function extractSocialLinks(html: string, baseUrl: string): Record<string, strin
   return socialLinks;
 }
 
+// Search engine fallback to find social profiles and contact pages
+async function searchEngineFind(domain: string, searchType: string): Promise<string | null> {
+  try {
+    const domainClean = domain.replace(/^https?:\/\/(www\.)?/, '').split('/')[0];
+    
+    // Build search query based on type
+    let searchQuery = '';
+    let expectedDomain = '';
+    
+    switch (searchType) {
+      case 'contact':
+        searchQuery = `${domainClean} contact page`;
+        expectedDomain = domainClean;
+        break;
+      case 'facebook':
+        searchQuery = `${domainClean} facebook`;
+        expectedDomain = 'facebook.com';
+        break;
+      case 'instagram':
+        searchQuery = `${domainClean} instagram`;
+        expectedDomain = 'instagram.com';
+        break;
+      case 'twitter':
+        searchQuery = `${domainClean} twitter OR x.com`;
+        expectedDomain = 'twitter.com';
+        break;
+      case 'linkedin':
+        searchQuery = `${domainClean} linkedin`;
+        expectedDomain = 'linkedin.com';
+        break;
+      case 'youtube':
+        searchQuery = `${domainClean} youtube`;
+        expectedDomain = 'youtube.com';
+        break;
+      default:
+        return null;
+    }
+    
+    console.log(`Search fallback: "${searchQuery}"`);
+    
+    // Use DuckDuckGo HTML search (no API key needed, respects privacy)
+    const searchUrl = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(searchQuery)}`;
+    
+    const response = await axios.get(searchUrl, {
+      timeout: 10000,
+      headers: {
+        'User-Agent': USER_AGENTS[0],
+        'Accept': 'text/html',
+      },
+      maxRedirects: 5,
+    });
+    
+    if (!response.data) return null;
+    
+    const $ = cheerio.load(response.data);
+    
+    // Extract URLs from search results
+    const results: string[] = [];
+    
+    // DuckDuckGo result links
+    $('.result__url, .result__a').each((_, element) => {
+      const href = $(element).attr('href') || $(element).text();
+      if (href) {
+        results.push(href);
+      }
+    });
+    
+    // Also check for direct links in snippets
+    $('a[href]').each((_, element) => {
+      const href = $(element).attr('href');
+      if (href && href.startsWith('http')) {
+        results.push(href);
+      }
+    });
+    
+    console.log(`Found ${results.length} search results`);
+    
+    // Filter and find the best match
+    for (const url of results) {
+      const lowerUrl = url.toLowerCase();
+      
+      if (searchType === 'contact') {
+        // For contact pages, look for URLs from the same domain with contact-related paths
+        if (lowerUrl.includes(domainClean) && 
+            (lowerUrl.includes('contact') || lowerUrl.includes('about') || lowerUrl.includes('reach'))) {
+          console.log(`Found contact page via search: ${url}`);
+          return url;
+        }
+      } else {
+        // For social profiles, look for the platform domain
+        if (lowerUrl.includes(expectedDomain)) {
+          // Validate it's a profile URL, not just the homepage
+          const cleanUrl = url.split('?')[0].split('#')[0];
+          
+          if (searchType === 'linkedin' && lowerUrl.includes('linkedin.com/company/')) {
+            console.log(`Found LinkedIn via search: ${cleanUrl}`);
+            return cleanUrl;
+          } else if (searchType === 'facebook' && lowerUrl.includes('facebook.com/') && !lowerUrl.endsWith('facebook.com/')) {
+            console.log(`Found Facebook via search: ${cleanUrl}`);
+            return cleanUrl;
+          } else if ((searchType === 'twitter') && (lowerUrl.includes('twitter.com/') || lowerUrl.includes('x.com/')) && !lowerUrl.match(/\/(twitter\.com|x\.com)\/?$/)) {
+            console.log(`Found Twitter/X via search: ${cleanUrl}`);
+            return cleanUrl;
+          } else if (searchType === 'instagram' && lowerUrl.includes('instagram.com/') && !lowerUrl.endsWith('instagram.com/')) {
+            console.log(`Found Instagram via search: ${cleanUrl}`);
+            return cleanUrl;
+          } else if (searchType === 'youtube' && (lowerUrl.includes('youtube.com/channel/') || lowerUrl.includes('youtube.com/@') || lowerUrl.includes('youtube.com/c/'))) {
+            console.log(`Found YouTube via search: ${cleanUrl}`);
+            return cleanUrl;
+          }
+        }
+      }
+    }
+    
+    return null;
+  } catch (error: any) {
+    console.error(`Search engine fallback error for ${searchType}:`, error.message);
+    return null;
+  }
+}
+
 async function searchSocialProfile(companyName: string, platform: string, website: string): Promise<string | null> {
   const cleanName = companyName.replace(/\.(com|io|net|org|co|ai|dev|app|tech)$/i, '').trim();
   const nameVariations = [
@@ -1158,6 +1279,30 @@ export default async function handler(
         if (foundUrl) {
           result[platform as keyof EnrichResult] = foundUrl as any;
           console.log(`Found ${platform} via direct search: ${foundUrl}`);
+        }
+      }
+    }
+    
+    // FALLBACK: Use search engine to find missing data
+    console.log('🔍 Using search engine fallback for missing data...');
+    
+    // Try to find contact page if still missing
+    if (result.contact_page === 'Not found') {
+      const contactUrl = await searchEngineFind(website, 'contact');
+      if (contactUrl) {
+        result.contact_page = contactUrl;
+        console.log(`✅ Found contact page via search: ${contactUrl}`);
+      }
+    }
+    
+    // Try to find social profiles via search engine
+    const socialPlatforms = ['linkedin', 'facebook', 'twitter', 'instagram', 'youtube'];
+    for (const platform of socialPlatforms) {
+      if (result[platform as keyof EnrichResult] === 'Not found') {
+        const foundUrl = await searchEngineFind(website, platform);
+        if (foundUrl) {
+          result[platform as keyof EnrichResult] = foundUrl as any;
+          console.log(`✅ Found ${platform} via search engine: ${foundUrl}`);
         }
       }
     }
