@@ -1196,6 +1196,7 @@ export default async function handler(
       tiktok: 'Not found',
       pinterest: 'Not found',
       github: 'Not found',
+      discord: 'Not found',
       status: 'Method not allowed',
     });
   }
