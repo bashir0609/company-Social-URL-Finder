@@ -1015,19 +1015,14 @@ export default async function handler(
       // If AI found website, use it
       if (aiResults.website) {
         result.website = aiResults.website;
+        console.log(`AI found website: ${aiResults.website}`);
       }
       
-      // If AI method, use AI-generated keywords only
-      if (method === 'ai') {
-        result.status = 'Success (AI-powered)';
-        console.log('AI method: Returning pure AI results with AI-generated keywords');
-        return res.status(200).json(result);
-      }
+      // IMPORTANT: AI often hallucinates contact info and social links
+      // So we ALWAYS validate and extract from the actual website
+      // Only trust AI for website discovery, not for contact details
       
-      // For hybrid method, continue to extraction to fill missing data
-      if (method === 'hybrid') {
-        console.log('Hybrid mode: Using extraction to fill missing data');
-      }
+      console.log('AI method: Using AI website discovery, then extracting real data from website');
     }
     
     // EXTRACTION METHOD: Traditional web scraping

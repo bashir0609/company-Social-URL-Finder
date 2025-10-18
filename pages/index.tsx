@@ -3,7 +3,7 @@
 
 
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Head from 'next/head';
 import { Search, Upload, Download, Linkedin, Facebook, Twitter, Instagram, Youtube, Globe, Mail, Loader2, Copy, Check, Clock, FileDown, Moon, Sun, RefreshCw, Phone, Eye, TrendingUp, Settings, X } from 'lucide-react';
 import axios from 'axios';
@@ -63,7 +63,7 @@ export default function Home() {
   const [selectedColumn, setSelectedColumn] = useState<string>('');
   const [bulkProcessing, setBulkProcessing] = useState(false);
   const [bulkProgressLog, setBulkProgressLog] = useState<string[]>([]);
-  const [abortController, setAbortController] = useState<AbortController | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   // Load recent searches, dark mode, and visitor stats from localStorage
   useEffect(() => {
@@ -423,7 +423,7 @@ export default function Home() {
     setBulkProcessing(true);
     
     const controller = new AbortController();
-    setAbortController(controller);
+    abortControllerRef.current = controller;
 
     // Validate AI method requirements for bulk processing
     if (method === 'ai' || method === 'hybrid') {
@@ -517,7 +517,7 @@ export default function Home() {
     
     for (let i = 0; i < companies.length; i++) {
       // Check if aborted
-      if (abortController?.signal.aborted) {
+      if (abortControllerRef.current?.signal.aborted) {
         setBulkProgressLog(prev => [...prev, `⛔ Processing stopped by user at ${i}/${companies.length}`]);
         setBulkProcessing(false);
         return;
@@ -607,7 +607,7 @@ export default function Home() {
     
     setBulkProgressLog(prev => [...prev, `\n✅ Bulk enrichment completed! Processed ${companies.length} companies.`]);
     setBulkProcessing(false);
-    setAbortController(null);
+    abortControllerRef.current = null;
   };
 
   const downloadResults = () => {
@@ -1437,7 +1437,7 @@ export default function Home() {
                     
                     {bulkProcessing && (
                       <button
-                        onClick={() => abortController?.abort()}
+                        onClick={() => abortControllerRef.current?.abort()}
                         className="px-6 py-3 bg-red-600 text-white rounded-lg font-medium hover:bg-red-700 flex items-center gap-2"
                       >
                         <X className="w-4 h-4" />
