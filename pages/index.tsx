@@ -1524,6 +1524,12 @@ export default function Home() {
                           <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">LinkedIn</th>
                           <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Facebook</th>
                           <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Twitter</th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Instagram</th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">YouTube</th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">TikTok</th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">GitHub</th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Pinterest</th>
+                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Discord</th>
                           <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
                         </tr>
                       </thead>
@@ -1588,6 +1594,60 @@ export default function Home() {
                             <td className="px-4 py-3 text-sm">
                               {result.twitter !== 'Not found' ? (
                                 <a href={result.twitter} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+                                  Link
+                                </a>
+                              ) : (
+                                <span className="text-gray-400">-</span>
+                              )}
+                            </td>
+                            <td className="px-4 py-3 text-sm">
+                              {result.instagram !== 'Not found' ? (
+                                <a href={result.instagram} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+                                  Link
+                                </a>
+                              ) : (
+                                <span className="text-gray-400">-</span>
+                              )}
+                            </td>
+                            <td className="px-4 py-3 text-sm">
+                              {result.youtube !== 'Not found' ? (
+                                <a href={result.youtube} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+                                  Link
+                                </a>
+                              ) : (
+                                <span className="text-gray-400">-</span>
+                              )}
+                            </td>
+                            <td className="px-4 py-3 text-sm">
+                              {result.tiktok !== 'Not found' ? (
+                                <a href={result.tiktok} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+                                  Link
+                                </a>
+                              ) : (
+                                <span className="text-gray-400">-</span>
+                              )}
+                            </td>
+                            <td className="px-4 py-3 text-sm">
+                              {result.github !== 'Not found' ? (
+                                <a href={result.github} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+                                  Link
+                                </a>
+                              ) : (
+                                <span className="text-gray-400">-</span>
+                              )}
+                            </td>
+                            <td className="px-4 py-3 text-sm">
+                              {result.pinterest !== 'Not found' ? (
+                                <a href={result.pinterest} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+                                  Link
+                                </a>
+                              ) : (
+                                <span className="text-gray-400">-</span>
+                              )}
+                            </td>
+                            <td className="px-4 py-3 text-sm">
+                              {result.discord !== 'Not found' ? (
+                                <a href={result.discord} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
                                   Link
                                 </a>
                               ) : (
