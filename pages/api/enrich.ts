@@ -1473,6 +1473,19 @@ export default async function handler(
       result.status = 'Success';
     }
     
+    console.log('🎯 FINAL RESULT BEING RETURNED:', JSON.stringify({
+      company: result.company_name,
+      linkedin: result.linkedin,
+      facebook: result.facebook,
+      twitter: result.twitter,
+      instagram: result.instagram,
+      youtube: result.youtube,
+      tiktok: result.tiktok,
+      github: result.github,
+      pinterest: result.pinterest,
+      discord: result.discord
+    }));
+    
     return res.status(200).json(result);
 
   } catch (error) {
