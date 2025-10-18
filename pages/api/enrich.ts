@@ -998,15 +998,17 @@ async function comprehensiveExtraction(website: string): Promise<{
 
     const menuLinks: string[] = [];
     const importantKeywords = {
-      contact: ['contact', 'contact-us', 'contactus', 'get-in-touch', 'reach-us', 'connect'],
-      about: ['about', 'about-us', 'aboutus', 'who-we-are', 'our-story', 'company'],
-      privacy: ['privacy', 'privacy-policy', 'privacypolicy'],
-      terms: ['terms', 'terms-conditions', 'terms-of-service', 'tos'],
+      contact: ['contact', 'contact-us', 'contactus', 'get-in-touch', 'reach-us', 'connect', 'kontakt', 'contato', 'contacto'],
+      about: ['about', 'about-us', 'aboutus', 'who-we-are', 'our-story', 'company', 'uber-uns', 'sobre'],
+      privacy: ['privacy', 'privacy-policy', 'privacypolicy', 'datenschutz'],
+      terms: ['terms', 'terms-conditions', 'terms-of-service', 'tos', 'agb'],
     };
 
-    // Extract all navigation and footer links
-    $('nav a[href], header a[href], footer a[href], .menu a[href], .navigation a[href], .footer a[href]').each((_, element) => {
+    // Extract ALL links from the page (not just nav/footer)
+    $('a[href]').each((_, element) => {
       const href = $(element).attr('href');
+      const linkText = $(element).text().toLowerCase().trim();
+      
       if (href) {
         let fullUrl = href;
         if (href.startsWith('/')) {
@@ -1025,6 +1027,12 @@ async function comprehensiveExtraction(website: string): Promise<{
           const siteDomain = new URL(website).hostname;
           if (linkDomain === siteDomain && !menuLinks.includes(fullUrl)) {
             menuLinks.push(fullUrl);
+            
+            // Check link text for contact keywords
+            if (importantKeywords.contact.some(kw => linkText.includes(kw)) && result.contactPage === 'Not found') {
+              result.contactPage = fullUrl;
+              console.log(`Found contact page from link text: ${fullUrl}`);
+            }
           }
         } catch {
           // Invalid URL, skip
