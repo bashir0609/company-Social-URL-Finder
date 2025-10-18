@@ -629,42 +629,89 @@ async function searchEngineFind(domain: string, searchType: string): Promise<str
     
     console.log(`Search fallback: "${searchQuery}"`);
     
-    // Use DuckDuckGo HTML search (no API key needed, respects privacy)
-    const searchUrl = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(searchQuery)}`;
-    
-    const response = await axios.get(searchUrl, {
-      timeout: 10000,
-      headers: {
-        'User-Agent': USER_AGENTS[0],
-        'Accept': 'text/html',
-      },
-      maxRedirects: 5,
-    });
-    
-    if (!response.data) return null;
-    
-    const $ = cheerio.load(response.data);
-    
-    // Extract URLs from search results
+    // Try multiple search engines for better results
     const results: string[] = [];
     
-    // DuckDuckGo result links
-    $('.result__url, .result__a').each((_, element) => {
-      const href = $(element).attr('href') || $(element).text();
-      if (href) {
-        results.push(href);
+    // Method 1: Try Google search (scrape search results page)
+    try {
+      const googleUrl = `https://www.google.com/search?q=${encodeURIComponent(searchQuery)}`;
+      const googleResponse = await axios.get(googleUrl, {
+        timeout: 8000,
+        headers: {
+          'User-Agent': USER_AGENTS[0],
+          'Accept': 'text/html',
+          'Accept-Language': 'en-US,en;q=0.9',
+        },
+        maxRedirects: 5,
+      });
+      
+      if (googleResponse.data) {
+        const $ = cheerio.load(googleResponse.data);
+        
+        // Extract URLs from Google search results
+        $('a[href]').each((_, element) => {
+          const href = $(element).attr('href');
+          if (href) {
+            // Google wraps URLs in /url?q= format
+            if (href.includes('/url?q=')) {
+              const match = href.match(/\/url\?q=([^&]+)/);
+              if (match && match[1]) {
+                const decodedUrl = decodeURIComponent(match[1]);
+                if (decodedUrl.startsWith('http')) {
+                  results.push(decodedUrl);
+                }
+              }
+            } else if (href.startsWith('http') && !href.includes('google.com')) {
+              results.push(href);
+            }
+          }
+        });
+        
+        // Also check for direct links in result snippets
+        $('.yuRUbf a, .v5yQqb a, cite').each((_, element) => {
+          const href = $(element).attr('href') || $(element).text();
+          if (href && href.startsWith('http')) {
+            results.push(href);
+          }
+        });
+        
+        console.log(`Google search found ${results.length} results`);
       }
-    });
+    } catch (googleError) {
+      console.log('Google search failed, trying DuckDuckGo...');
+    }
     
-    // Also check for direct links in snippets
-    $('a[href]').each((_, element) => {
-      const href = $(element).attr('href');
-      if (href && href.startsWith('http')) {
-        results.push(href);
+    // Method 2: Try DuckDuckGo if Google didn't work well
+    if (results.length < 3) {
+      try {
+        const ddgUrl = `https://html.duckduckgo.com/html/?q=${encodeURIComponent(searchQuery)}`;
+        const ddgResponse = await axios.get(ddgUrl, {
+          timeout: 8000,
+          headers: {
+            'User-Agent': USER_AGENTS[1],
+            'Accept': 'text/html',
+          },
+          maxRedirects: 5,
+        });
+        
+        if (ddgResponse.data) {
+          const $ = cheerio.load(ddgResponse.data);
+          
+          $('.result__url, .result__a, .result__snippet').each((_, element) => {
+            const href = $(element).attr('href') || $(element).text();
+            if (href && href.startsWith('http')) {
+              results.push(href);
+            }
+          });
+          
+          console.log(`DuckDuckGo added ${results.length} total results`);
+        }
+      } catch (ddgError) {
+        console.log('DuckDuckGo search also failed');
       }
-    });
+    }
     
-    console.log(`Found ${results.length} search results`);
+    console.log(`Total search results: ${results.length}`);
     
     // Filter and find the best match
     for (const url of results) {
