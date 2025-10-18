@@ -815,8 +815,25 @@ export default async function handler(
               console.log(`Rejected invalid AI phone: ${value}`);
             }
           } else if (key !== 'keywords') {
-            // For other fields (social links, website, etc.), accept AI results
-            result[key as keyof EnrichResult] = value as any;
+            // For social media links, only use AI if extraction didn't find anything
+            const socialFields = ['linkedin', 'facebook', 'twitter', 'instagram', 'youtube', 'tiktok', 'pinterest', 'github'];
+            
+            if (socialFields.includes(key)) {
+              // Only use AI social links if extraction didn't find them
+              if (!result[key as keyof EnrichResult] || result[key as keyof EnrichResult] === 'Not found') {
+                // Basic validation: must be a valid URL with proper domain
+                const urlStr = value as string;
+                if (urlStr.startsWith('http') && urlStr.length > 20) {
+                  result[key as keyof EnrichResult] = value as any;
+                  console.log(`Using AI ${key}: ${value}`);
+                }
+              } else {
+                console.log(`Skipping AI ${key} - extraction already found: ${result[key as keyof EnrichResult]}`);
+              }
+            } else {
+              // For website and contact_page, use AI results
+              result[key as keyof EnrichResult] = value as any;
+            }
           }
         }
       }
@@ -941,7 +958,8 @@ export default async function handler(
     }
 
     // Search for missing platforms with expanded list
-    const missingPlatforms = ['linkedin', 'facebook', 'twitter', 'instagram', 'youtube', 'tiktok', 'github', 'pinterest'];
+    // Skip Facebook and Instagram as they return false positives (200 for non-existent pages)
+    const missingPlatforms = ['linkedin', 'twitter', 'youtube', 'tiktok', 'github', 'pinterest'];
     for (const platform of missingPlatforms) {
       if (result[platform as keyof EnrichResult] === 'Not found') {
         const foundUrl = await searchSocialProfile(company, platform, website);
