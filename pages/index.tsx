@@ -269,19 +269,28 @@ export default function Home() {
     // Add to recent searches
     addToRecentSearches(companyInput);
     
-    // Increment search counter
+    // Increment search count
     incrementSearchCount();
 
     try {
-      // Simulate progress updates based on method
-      if (method === 'ai' || method === 'hybrid') {
+      // Show progress messages based on method
+      if (method === 'ai') {
         setTimeout(() => setSearchProgress('🤖 AI analyzing company...'), 500);
         setTimeout(() => setSearchProgress('🔍 Searching social profiles...'), 1500);
         setTimeout(() => setSearchProgress('✅ Processing results...'), 2500);
+      } else if (method === 'extraction') {
+        setTimeout(() => setSearchProgress('🌐 Finding website...'), 500);
+        setTimeout(() => setSearchProgress('📋 Step 1: Crawling menu links...'), 2000);
+        setTimeout(() => setSearchProgress('🔍 Step 2: Identifying important pages...'), 4000);
+        setTimeout(() => setSearchProgress('📄 Step 3: Scraping contact, about, privacy pages...'), 6000);
+        setTimeout(() => setSearchProgress('🔗 Extracting social links and contact info...'), 8000);
+        setTimeout(() => setSearchProgress('✅ Processing results...'), 10000);
       } else {
-        setTimeout(() => setSearchProgress('🌐 Fetching website content...'), 500);
-        setTimeout(() => setSearchProgress('🔗 Extracting social links...'), 1500);
-        setTimeout(() => setSearchProgress('✅ Processing results...'), 2500);
+        setTimeout(() => setSearchProgress('🤖 AI analyzing company...'), 500);
+        setTimeout(() => setSearchProgress('🌐 Finding website...'), 2000);
+        setTimeout(() => setSearchProgress('📋 Crawling menu links...'), 4000);
+        setTimeout(() => setSearchProgress('📄 Scraping multiple pages...'), 6000);
+        setTimeout(() => setSearchProgress('✅ Processing results...'), 8000);
       }
 
       const response = await axios.post<EnrichResult>('/api/enrich', {

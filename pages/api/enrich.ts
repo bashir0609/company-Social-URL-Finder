@@ -1007,9 +1007,10 @@ export default async function handler(
     }
 
     result.website = website;
+    console.log(`✅ Website found: ${website}`);
 
     // Use comprehensive multi-step extraction
-    console.log('Starting comprehensive extraction...');
+    console.log('🔍 Starting comprehensive extraction...');
     const extracted = await comprehensiveExtraction(website);
     
     // Apply extracted data to result
