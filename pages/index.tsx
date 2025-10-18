@@ -24,6 +24,7 @@ interface EnrichResult {
   tiktok: string;
   pinterest: string;
   github: string;
+  discord: string;
   keywords?: string[];
   status: string;
 }
@@ -351,6 +352,7 @@ export default function Home() {
         tiktok: 'Not found',
         pinterest: 'Not found',
         github: 'Not found',
+        discord: 'Not found',
         status: 'Error: Failed to fetch',
       });
     } finally {
@@ -601,6 +603,7 @@ export default function Home() {
           tiktok: 'Not found',
           pinterest: 'Not found',
           github: 'Not found',
+          discord: 'Not found',
           status: 'Error',
         });
       }

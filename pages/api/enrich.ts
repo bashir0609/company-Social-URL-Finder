@@ -3,14 +3,15 @@ import axios from 'axios';
 import * as cheerio from 'cheerio';
 
 const SOCIAL_PLATFORMS = {
-  linkedin: ['linkedin.com/company/', 'linkedin.com/in/', 'linkedin.com/school/'],
-  facebook: ['facebook.com/', 'fb.com/'],
-  twitter: ['twitter.com/', 'x.com/'],
-  instagram: ['instagram.com/'],
-  youtube: ['youtube.com/channel/', 'youtube.com/c/', 'youtube.com/@', 'youtube.com/user/'],
-  tiktok: ['tiktok.com/@'],
-  pinterest: ['pinterest.com/'],
-  github: ['github.com/'],
+  linkedin: ['linkedin.com/company/', 'linkedin.com/in/', 'linkedin.com/school/', 'linkedin.com'],
+  facebook: ['facebook.com/', 'fb.com/', 'facebook.com', 'fb.com'],
+  twitter: ['twitter.com/', 'x.com/', 'twitter.com', 'x.com'],
+  instagram: ['instagram.com/', 'instagram.com'],
+  youtube: ['youtube.com/channel/', 'youtube.com/c/', 'youtube.com/@', 'youtube.com/user/', 'youtube.com', 'youtu.be'],
+  tiktok: ['tiktok.com/@', 'tiktok.com'],
+  pinterest: ['pinterest.com/', 'pinterest.com'],
+  github: ['github.com/', 'github.com'],
+  discord: ['discord.gg/', 'discord.com/invite/', 'discord.com'],
 };
 
 interface EnrichResult {
@@ -27,6 +28,7 @@ interface EnrichResult {
   tiktok: string;
   pinterest: string;
   github: string;
+  discord: string;
   keywords?: string[];
   status: string;
 }
@@ -608,7 +610,7 @@ function extractSocialLinks(html: string, baseUrl: string): Record<string, strin
   
   // Method 3: Extract from raw HTML text (for links in JavaScript or plain text)
   const htmlText = html;
-  const urlRegex = /https?:\/\/(www\.)?(linkedin\.com\/company\/[^\s"'<>]+|linkedin\.com\/in\/[^\s"'<>]+|facebook\.com\/[^\s"'<>]+|fb\.com\/[^\s"'<>]+|twitter\.com\/[^\s"'<>]+|x\.com\/[^\s"'<>]+|instagram\.com\/[^\s"'<>]+|youtube\.com\/(channel|c|@|user)\/[^\s"'<>]+|tiktok\.com\/@[^\s"'<>]+|pinterest\.com\/[^\s"'<>]+|github\.com\/[^\s"'<>]+)/gi;
+  const urlRegex = /https?:\/\/(www\.)?(linkedin\.com\/company\/[^\s"'<>]+|linkedin\.com\/in\/[^\s"'<>]+|facebook\.com\/[^\s"'<>]+|fb\.com\/[^\s"'<>]+|twitter\.com\/[^\s"'<>]+|x\.com\/[^\s"'<>]+|instagram\.com\/[^\s"'<>]+|youtube\.com\/(channel|c|@|user)\/[^\s"'<>]+|youtu\.be\/[^\s"'<>]+|tiktok\.com\/@[^\s"'<>]+|pinterest\.com\/[^\s"'<>]+|github\.com\/[^\s"'<>]+|discord\.gg\/[^\s"'<>]+|discord\.com\/invite\/[^\s"'<>]+)/gi;
   
   const matches = htmlText.match(urlRegex);
   if (matches) {
@@ -1233,6 +1235,7 @@ export default async function handler(
     tiktok: 'Not found',
     pinterest: 'Not found',
     github: 'Not found',
+    discord: 'Not found',
     status: 'Processing',
   };
 
