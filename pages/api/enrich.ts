@@ -1367,8 +1367,9 @@ export default async function handler(
     
     // Apply social links from comprehensive extraction
     for (const [platform, url] of Object.entries(extracted.socialLinks)) {
-      if (platform in result && result[platform as keyof EnrichResult] === 'Not found') {
+      if (url && url !== 'Not found') {
         result[platform as keyof EnrichResult] = url as any;
+        console.log(`✅ Applied ${platform}: ${url}`);
       }
     }
     
