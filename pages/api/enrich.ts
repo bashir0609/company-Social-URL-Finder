@@ -1379,12 +1379,30 @@ export default async function handler(
     }
     
     // Apply social links from comprehensive extraction
+    console.log('📊 Extracted social links:', JSON.stringify(extracted.socialLinks));
+    console.log('📊 Current result before applying:', {
+      linkedin: result.linkedin,
+      facebook: result.facebook,
+      twitter: result.twitter,
+      instagram: result.instagram
+    });
+    
     for (const [platform, url] of Object.entries(extracted.socialLinks)) {
+      console.log(`🔍 Checking platform: ${platform}, url: ${url}`);
       if (url && url !== 'Not found') {
         result[platform as keyof EnrichResult] = url as any;
         console.log(`✅ Applied ${platform}: ${url}`);
+      } else {
+        console.log(`❌ Skipped ${platform}: ${url}`);
       }
     }
+    
+    console.log('📊 Result after applying:', {
+      linkedin: result.linkedin,
+      facebook: result.facebook,
+      twitter: result.twitter,
+      instagram: result.instagram
+    });
     
     // Extract keywords from homepage
     const homeHtml = await fetchPageContent(website);
