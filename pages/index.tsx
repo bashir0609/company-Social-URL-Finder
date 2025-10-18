@@ -59,6 +59,8 @@ export default function Home() {
   const [selectedModel, setSelectedModel] = useState<string>('');
   const [loadingModels, setLoadingModels] = useState(false);
   const [hasEnvKeys, setHasEnvKeys] = useState({ openrouter: false, gemini: false });
+  const [availableColumns, setAvailableColumns] = useState<string[]>([]);
+  const [selectedColumn, setSelectedColumn] = useState<string>('');
 
   // Load recent searches, dark mode, and visitor stats from localStorage
   useEffect(() => {
@@ -359,6 +361,47 @@ export default function Home() {
       setBulkFile(file);
       setBulkResults([]);
       setBulkProgress(0);
+      setAvailableColumns([]);
+      setSelectedColumn('');
+      
+      // Parse file to get column names
+      const fileExtension = file.name.split('.').pop()?.toLowerCase();
+      
+      if (fileExtension === 'csv') {
+        Papa.parse(file, {
+          header: true,
+          preview: 1,
+          complete: (results) => {
+            const columns = Object.keys((results.data as any[])[0] || {});
+            setAvailableColumns(columns);
+            // Auto-select company/name column
+            const defaultCol = columns.find(key => 
+              key.toLowerCase().includes('company') || 
+              key.toLowerCase().includes('name') ||
+              key.toLowerCase().includes('domain')
+            );
+            if (defaultCol) setSelectedColumn(defaultCol);
+          },
+        });
+      } else if (fileExtension === 'xlsx' || fileExtension === 'xls') {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const data = new Uint8Array(e.target?.result as ArrayBuffer);
+          const workbook = XLSX.read(data, { type: 'array' });
+          const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+          const jsonData = XLSX.utils.sheet_to_json(firstSheet, { header: 1 }) as any[][];
+          const columns = jsonData[0] || [];
+          setAvailableColumns(columns);
+          // Auto-select company/name column
+          const defaultCol = columns.find((key: string) => 
+            key.toLowerCase().includes('company') || 
+            key.toLowerCase().includes('name') ||
+            key.toLowerCase().includes('domain')
+          );
+          if (defaultCol) setSelectedColumn(defaultCol);
+        };
+        reader.readAsArrayBuffer(file);
+      }
     }
   };
 
@@ -396,14 +439,18 @@ export default function Home() {
         header: true,
         complete: async (results) => {
           const data = results.data as any[];
-          // Try to find company column
-          const companyCol = Object.keys(data[0] || {}).find(key => 
-            key.toLowerCase().includes('company') || key.toLowerCase().includes('name')
+          // Use selected column or try to find company column
+          const companyCol = selectedColumn || Object.keys(data[0] || {}).find(key => 
+            key.toLowerCase().includes('company') || 
+            key.toLowerCase().includes('name') ||
+            key.toLowerCase().includes('domain')
           );
           
           if (companyCol) {
             companies = data.map(row => row[companyCol]).filter(Boolean);
             await processBulkCompanies(companies);
+          } else {
+            setErrorMessage('❌ Please select a column containing company names or domains.');
           }
         },
       });
@@ -415,13 +462,18 @@ export default function Home() {
         const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
         const jsonData = XLSX.utils.sheet_to_json(firstSheet) as any[];
         
-        const companyCol = Object.keys(jsonData[0] || {}).find(key => 
-          key.toLowerCase().includes('company') || key.toLowerCase().includes('name')
+        // Use selected column or try to find company column
+        const companyCol = selectedColumn || Object.keys(jsonData[0] || {}).find(key => 
+          key.toLowerCase().includes('company') || 
+          key.toLowerCase().includes('name') ||
+          key.toLowerCase().includes('domain')
         );
         
         if (companyCol) {
           companies = jsonData.map(row => row[companyCol]).filter(Boolean);
           await processBulkCompanies(companies);
+        } else {
+          setErrorMessage('❌ Please select a column containing company names or domains.');
         }
       };
       reader.readAsArrayBuffer(bulkFile);
@@ -1263,9 +1315,30 @@ export default function Home() {
                   <p className="text-sm text-green-600 mb-2">
                     ✓ File uploaded: {bulkFile.name}
                   </p>
+                  
+                  {availableColumns.length > 0 && (
+                    <div className="mb-4">
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Select column containing company names/domains
+                      </label>
+                      <select
+                        value={selectedColumn}
+                        onChange={(e) => setSelectedColumn(e.target.value)}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+                      >
+                        <option value="">-- Select Column --</option>
+                        {availableColumns.map((col) => (
+                          <option key={col} value={col}>
+                            {col}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+                  
                   <button
                     onClick={processBulkFile}
-                    disabled={bulkProgress > 0 && bulkProgress < 100}
+                    disabled={!selectedColumn || (bulkProgress > 0 && bulkProgress < 100)}
                     className="px-6 py-3 bg-primary text-white rounded-lg font-medium hover:bg-blue-600 disabled:bg-gray-300 disabled:cursor-not-allowed"
                   >
                     {bulkProgress > 0 && bulkProgress < 100 ? 'Processing...' : 'Start Bulk Enrichment'}
