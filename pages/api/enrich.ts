@@ -659,10 +659,49 @@ async function comprehensiveExtraction(website: string): Promise<{
   try {
     // STEP 1: Crawl menu links from homepage
     console.log('Step 1: Crawling menu links from homepage...');
-    const homeHtml = await fetchPageContent(website);
+    let homeHtml = await fetchPageContent(website);
     if (!homeHtml) return result;
 
-    const $ = cheerio.load(homeHtml);
+    let $ = cheerio.load(homeHtml);
+    let actualHomepage = website;
+    
+    // Check if this is a splash/language selection page (very few links, language keywords)
+    const navLinks = $('nav a[href], header a[href], .menu a[href], .navigation a[href]').length;
+    const bodyText = $('body').text().toLowerCase();
+    const isLanguagePage = (bodyText.includes('english') || bodyText.includes('italiano') || 
+                           bodyText.includes('français') || bodyText.includes('deutsch') ||
+                           bodyText.includes('español')) && navLinks < 5;
+    
+    if (isLanguagePage) {
+      console.log('Detected splash/language page, looking for main content link...');
+      // Try to find the English or main content link
+      const languageLinks = $('a[href]').toArray();
+      for (const link of languageLinks) {
+        const href = $(link).attr('href');
+        const text = $(link).text().toLowerCase();
+        if (href && (text.includes('english') || text.includes('home') || text.includes('enter'))) {
+          let contentUrl = href;
+          if (href.startsWith('/')) {
+            contentUrl = new URL(href, website).toString();
+          } else if (!href.startsWith('http')) {
+            try {
+              contentUrl = new URL(href, website).toString();
+            } catch {
+              continue;
+            }
+          }
+          console.log(`Following language link to: ${contentUrl}`);
+          const contentHtml = await fetchPageContent(contentUrl);
+          if (contentHtml) {
+            homeHtml = contentHtml;
+            $ = cheerio.load(homeHtml);
+            actualHomepage = contentUrl;
+            break;
+          }
+        }
+      }
+    }
+
     const menuLinks: string[] = [];
     const importantKeywords = {
       contact: ['contact', 'contact-us', 'contactus', 'get-in-touch', 'reach-us', 'connect'],
@@ -677,10 +716,10 @@ async function comprehensiveExtraction(website: string): Promise<{
       if (href) {
         let fullUrl = href;
         if (href.startsWith('/')) {
-          fullUrl = new URL(href, website).toString();
+          fullUrl = new URL(href, actualHomepage).toString();
         } else if (!href.startsWith('http')) {
           try {
-            fullUrl = new URL(href, website).toString();
+            fullUrl = new URL(href, actualHomepage).toString();
           } catch {
             return;
           }
@@ -702,7 +741,7 @@ async function comprehensiveExtraction(website: string): Promise<{
     // STEP 2: Identify and scrape important pages
     console.log(`Step 2: Found ${menuLinks.length} menu links, identifying important pages...`);
     const pagesToScrape: { url: string; type: string }[] = [
-      { url: website, type: 'home' },
+      { url: actualHomepage, type: 'home' },
     ];
 
     // Categorize links
