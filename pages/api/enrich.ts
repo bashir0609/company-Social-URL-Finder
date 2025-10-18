@@ -542,11 +542,14 @@ function extractSocialLinks(html: string, baseUrl: string): Record<string, strin
     
     if (!lowerUrl.includes(pattern)) return null;
     
-    // Very lenient validation - just check it's not a generic page
-    const excludePatterns = ['/search', '/login', '/signup', '/privacy', '/terms', '/about/terms', '/about/privacy'];
+    // Exclude share buttons and generic pages
+    const excludePatterns = [
+      '/sharer/', '/share/', '/intent/', '/shareArticle',  // Share buttons
+      '/search', '/login', '/signup', '/privacy', '/terms', '/about/terms', '/about/privacy'  // Generic pages
+    ];
     for (const exclude of excludePatterns) {
       if (lowerUrl.includes(exclude)) {
-        console.log(`❌ Excluded ${url} (matches ${exclude})`);
+        console.log(`❌ Excluded ${url} (share button or generic page: ${exclude})`);
         return null;
       }
     }
