@@ -551,6 +551,10 @@ export default function Home() {
         setBulkProgressLog(prev => [...prev, `   📄 Scraping multiple pages...`]);
         await new Promise(resolve => setTimeout(resolve, 100));
         setBulkProgressLog(prev => [...prev, `   🔗 Extracting social links and contact info...`]);
+        await new Promise(resolve => setTimeout(resolve, 100));
+        setBulkProgressLog(prev => [...prev, `   🔎 Trying direct profile URLs...`]);
+        await new Promise(resolve => setTimeout(resolve, 100));
+        setBulkProgressLog(prev => [...prev, `   🔍 Search engine fallback for missing data...`]);
       }
       
       try {
