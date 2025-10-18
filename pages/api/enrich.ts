@@ -519,36 +519,56 @@ function extractSocialLinks(html: string, baseUrl: string): Record<string, strin
   const $ = cheerio.load(html);
   const socialLinks: Record<string, string> = {};
   
-  // Find all links
+  // Helper function to validate and clean social URLs
+  const validateSocialUrl = (url: string, pattern: string): string | null => {
+    const cleanUrl = url.split('?')[0].split('#')[0];
+    const lowerUrl = cleanUrl.toLowerCase();
+    
+    if (!lowerUrl.includes(pattern)) return null;
+    
+    // Check if URL has content after the platform domain
+    const urlParts = cleanUrl.split(pattern);
+    if (urlParts.length > 1 && urlParts[1].length > 1) {
+      const pathAfterDomain = urlParts[1];
+      // Exclude generic pages
+      if (!pathAfterDomain.startsWith('search') && 
+          !pathAfterDomain.startsWith('login') && 
+          !pathAfterDomain.startsWith('signup') &&
+          !pathAfterDomain.startsWith('privacy') &&
+          !pathAfterDomain.startsWith('terms')) {
+        return cleanUrl;
+      }
+    }
+    return null;
+  };
+  
+  // Method 1: Extract from all <a> tags
   $('a[href]').each((_, element) => {
     const href = $(element).attr('href');
     if (!href) return;
     
     let fullUrl = href;
-    if (href.startsWith('/')) {
-      fullUrl = new URL(href, baseUrl).toString();
+    // Handle relative URLs
+    if (href.startsWith('/') && !href.startsWith('//')) {
+      try {
+        fullUrl = new URL(href, baseUrl).toString();
+      } catch (e) {
+        return;
+      }
+    } else if (href.startsWith('//')) {
+      fullUrl = 'https:' + href;
+    } else if (!href.startsWith('http')) {
+      return; // Skip non-URL hrefs
     }
     
-    const lowerUrl = fullUrl.toLowerCase();
-    
-    // Check each platform with proper validation
+    // Check each platform
     for (const [platform, patterns] of Object.entries(SOCIAL_PLATFORMS)) {
       if (!socialLinks[platform]) {
         for (const pattern of patterns) {
-          if (lowerUrl.includes(pattern)) {
-            // Validate it's actually a profile URL, not just contains the domain
-            const cleanUrl = fullUrl.split('?')[0].split('#')[0];
-            
-            // Additional validation: check if URL has content after the platform domain
-            const urlParts = cleanUrl.split(pattern);
-            if (urlParts.length > 1 && urlParts[1].length > 0) {
-              // Make sure it's not just the domain or a generic page
-              const pathAfterDomain = urlParts[1];
-              if (pathAfterDomain !== '/' && !pathAfterDomain.startsWith('/search') && !pathAfterDomain.startsWith('/login')) {
-                socialLinks[platform] = cleanUrl;
-                break;
-              }
-            }
+          const validated = validateSocialUrl(fullUrl, pattern);
+          if (validated) {
+            socialLinks[platform] = validated;
+            break;
           }
         }
       }
@@ -585,6 +605,28 @@ function extractSocialLinks(html: string, baseUrl: string): Record<string, strin
       }
     }
   });
+  
+  // Method 3: Extract from raw HTML text (for links in JavaScript or plain text)
+  const htmlText = html;
+  const urlRegex = /https?:\/\/(www\.)?(linkedin\.com\/company\/[^\s"'<>]+|linkedin\.com\/in\/[^\s"'<>]+|facebook\.com\/[^\s"'<>]+|fb\.com\/[^\s"'<>]+|twitter\.com\/[^\s"'<>]+|x\.com\/[^\s"'<>]+|instagram\.com\/[^\s"'<>]+|youtube\.com\/(channel|c|@|user)\/[^\s"'<>]+|tiktok\.com\/@[^\s"'<>]+|pinterest\.com\/[^\s"'<>]+|github\.com\/[^\s"'<>]+)/gi;
+  
+  const matches = htmlText.match(urlRegex);
+  if (matches) {
+    for (const match of matches) {
+      for (const [platform, patterns] of Object.entries(SOCIAL_PLATFORMS)) {
+        if (!socialLinks[platform]) {
+          for (const pattern of patterns) {
+            const validated = validateSocialUrl(match, pattern);
+            if (validated) {
+              socialLinks[platform] = validated;
+              console.log(`Found ${platform} in raw HTML: ${validated}`);
+              break;
+            }
+          }
+        }
+      }
+    }
+  }
   
   return socialLinks;
 }
