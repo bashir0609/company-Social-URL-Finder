@@ -1211,26 +1211,6 @@ export default function Home() {
               {/* Results */}
               {result && (
                 <div className="mt-6">
-                  <div className={`p-4 rounded-lg mb-4 flex justify-between items-center ${
-                    result.status === 'Success' 
-                      ? 'bg-green-50 border border-green-200' 
-                      : 'bg-red-50 border border-red-200'
-                  }`}>
-                    <p className="font-medium">
-                      Status: {result.status}
-                    </p>
-                    {result.status !== 'Success' && (
-                      <button
-                        onClick={handleSingleSearch}
-                        disabled={loading}
-                        className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 disabled:bg-gray-400 flex items-center gap-2"
-                      >
-                        <RefreshCw className="w-4 h-4" />
-                        Retry Search
-                      </button>
-                    )}
-                  </div>
-
                   <div className="grid md:grid-cols-2 gap-4">
                     <div className="p-4 bg-gray-50 rounded-lg">
                       <h3 className="font-semibold mb-2 flex items-center gap-2">
