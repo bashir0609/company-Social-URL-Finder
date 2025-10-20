@@ -323,15 +323,9 @@ export default function Home() {
       setResult(response.data);
       setSearchProgress('');
       
-      // Better error messages based on status
-      if (response.data.status.includes('Failed')) {
-        if (response.data.status.includes('Could not find website')) {
-          setErrorMessage('❌ Website not found. Please check the company name or try entering the website URL directly.');
-        } else if (response.data.status.includes('API key')) {
-          setErrorMessage('🔑 AI method requires an API key. Please enter your OpenRouter API key above or switch to Extraction method.');
-        } else {
-          setErrorMessage('⚠️ Search completed with some issues. Check the results below.');
-        }
+      // Check if we got a valid result
+      if (!response.data.website) {
+        setErrorMessage('❌ Website not found. Please check the company name or try entering the website URL directly.');
       }
     } catch (error: any) {
       console.error('Error:', error);
