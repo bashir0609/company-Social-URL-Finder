@@ -29,14 +29,6 @@ interface EnrichResult {
 export default function Home() {
   const [activeTab, setActiveTab] = useState<'single' | 'bulk'>('single');
   const [companyInput, setCompanyInput] = useState('');
-  const [aiProvider, setAiProvider] = useState<'openrouter' | 'gemini'>('openrouter');
-  const [apiKey, setApiKey] = useState('');
-  const [geminiApiKey, setGeminiApiKey] = useState('');
-  const [showApiKey, setShowApiKey] = useState(false);
-  const [method, setMethod] = useState<'extraction' | 'ai' | 'hybrid'>('extraction');
-  const [customPrompt, setCustomPrompt] = useState('');
-  const [showAdvanced, setShowAdvanced] = useState(false);
-  const [showApiKeys, setShowApiKeys] = useState(false);
   const [showSidebar, setShowSidebar] = useState(false);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<EnrichResult | null>(null);
@@ -53,10 +45,7 @@ export default function Home() {
   const [showPlatformFilter, setShowPlatformFilter] = useState(false);
   const [visitorCount, setVisitorCount] = useState(0);
   const [searchCount, setSearchCount] = useState(0);
-  const [availableModels, setAvailableModels] = useState<Array<{id: string; name: string; isFree?: boolean}>>([]);
-  const [selectedModel, setSelectedModel] = useState<string>('');
-  const [loadingModels, setLoadingModels] = useState(false);
-  const [hasEnvKeys, setHasEnvKeys] = useState({ openrouter: false, gemini: false });
+  // AI-related state removed - pure web scraping only
   const [availableColumns, setAvailableColumns] = useState<string[]>([]);
   const [selectedColumn, setSelectedColumn] = useState<string>('');
   const [bulkProcessing, setBulkProcessing] = useState(false);
@@ -312,13 +301,7 @@ export default function Home() {
 
       const response = await axios.post<EnrichResult>('/api/enrich', {
         company: companyInput,
-        method: method,
-        aiProvider: aiProvider,
-        apiKey: apiKey || undefined,
-        geminiApiKey: geminiApiKey || undefined,
-        customPrompt: customPrompt || undefined,
         platforms: selectedPlatforms,
-        model: selectedModel,
       });
       setResult(response.data);
       setSearchProgress('');
