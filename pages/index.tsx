@@ -101,7 +101,41 @@ export default function Home() {
     }
   }, [darkMode]);
 
-  // AI-related hooks removed - pure web scraping only
+  // Check environment variables on load and auto-fetch models
+  useEffect(() => {
+    const checkEnvVars = async () => {
+      try {
+        const response = await axios.get('/api/check-env');
+        setHasEnvKeys({
+          openrouter: response.data.hasOpenRouterKey,
+          gemini: response.data.hasGeminiKey
+        });
+        
+        // Auto-fetch models if OpenRouter key is available in env
+        if (response.data.hasOpenRouterKey && aiProvider === 'openrouter') {
+          console.log('OpenRouter key found in environment, fetching models...');
+          await fetchModels();
+        }
+      } catch (error) {
+        console.error('Failed to check environment variables:', error);
+      }
+    };
+    checkEnvVars();
+  }, []);
+
+  // Auto-fetch models when API key is entered or AI provider changes
+  useEffect(() => {
+    const shouldFetchModels = 
+      aiProvider === 'openrouter' && 
+      (method === 'ai' || method === 'hybrid') &&
+      (apiKey || hasEnvKeys.openrouter) &&
+      availableModels.length === 0;
+    
+    if (shouldFetchModels) {
+      console.log('API key detected, auto-fetching models...');
+      fetchModels();
+    }
+  }, [apiKey, aiProvider, method, hasEnvKeys.openrouter]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -139,7 +173,34 @@ export default function Home() {
     localStorage.setItem('recentSearches', JSON.stringify(updated));
   };
 
-  // fetchModels removed - no AI functionality
+  // Fetch available models from OpenRouter
+  const fetchModels = async () => {
+    setLoadingModels(true);
+    setErrorMessage('');
+    
+    try {
+      // Pass apiKey if available, otherwise backend will use env variable
+      const url = apiKey 
+        ? `/api/models?apiKey=${encodeURIComponent(apiKey)}`
+        : '/api/models';
+      
+      const response = await axios.get(url);
+      const models = response.data.models;
+      setAvailableModels(models);
+      
+      // Set first free model as default, or first model if no free models
+      if (models.length > 0) {
+        const firstFreeModel = models.find((m: any) => m.isFree);
+        setSelectedModel(firstFreeModel ? firstFreeModel.id : models[0].id);
+      }
+    } catch (error: any) {
+      console.error('Error fetching models:', error);
+      const errorMsg = error.response?.data?.error || error.message;
+      setErrorMessage(`❌ Failed to fetch models: ${errorMsg}`);
+    } finally {
+      setLoadingModels(false);
+    }
+  };
 
   // Copy to clipboard
   const copyToClipboard = async (text: string) => {
@@ -181,6 +242,29 @@ export default function Home() {
   const handleSingleSearch = async () => {
     if (!companyInput.trim()) return;
 
+    // Validate AI method requirements
+    if (method === 'ai' || method === 'hybrid') {
+      if (aiProvider === 'openrouter') {
+        if (!apiKey && !hasEnvKeys.openrouter) {
+          setErrorMessage('🔑 AI method requires an OpenRouter API key. Please enter your API key above or set it in environment variables.');
+          return;
+        }
+        if (availableModels.length === 0) {
+          setErrorMessage('⚠️ Please fetch AI models first by clicking the "Fetch Models" button.');
+          return;
+        }
+        if (!selectedModel) {
+          setErrorMessage('⚠️ Please select an AI model from the dropdown.');
+          return;
+        }
+      } else if (aiProvider === 'gemini') {
+        if (!geminiApiKey && !hasEnvKeys.gemini) {
+          setErrorMessage('🔑 AI method requires a Google Gemini API key. Please enter your API key above or set it in environment variables.');
+          return;
+        }
+      }
+    }
+
     setLoading(true);
     setResult(null);
     setErrorMessage('');
@@ -193,11 +277,27 @@ export default function Home() {
     incrementSearchCount();
 
     try {
-      // Show progress messages for web scraping
-      setTimeout(() => setSearchProgress('🚀 Step 1: Trying direct profile URLs...'), 500);
-      setTimeout(() => setSearchProgress('🌐 Step 2: Finding company website...'), 2000);
-      setTimeout(() => setSearchProgress('📋 Step 3: Extracting data from website...'), 4000);
-      setTimeout(() => setSearchProgress('✅ Processing results...'), 6000);
+      // Show progress messages based on method
+      if (method === 'ai') {
+        setTimeout(() => setSearchProgress('🤖 AI analyzing company...'), 500);
+        setTimeout(() => setSearchProgress('🔍 Searching social profiles...'), 1500);
+        setTimeout(() => setSearchProgress('✅ Processing results...'), 2500);
+      } else if (method === 'extraction') {
+        setTimeout(() => setSearchProgress('🚀 Step 1: Trying direct profile URLs...'), 500);
+        setTimeout(() => setSearchProgress('🌐 Step 2: Finding company website...'), 2000);
+        setTimeout(() => setSearchProgress('📋 Step 3: Crawling website menu links...'), 4000);
+        setTimeout(() => setSearchProgress('🔍 Step 3: Scraping contact, about pages...'), 6000);
+        setTimeout(() => setSearchProgress('🔗 Step 3: Extracting social links and contact info...'), 8000);
+        setTimeout(() => setSearchProgress('🔎 Step 4: Search engine fallback for missing data...'), 10000);
+        setTimeout(() => setSearchProgress('📊 Finalizing keywords and data...'), 12000);
+        setTimeout(() => setSearchProgress('✅ Processing results...'), 14000);
+      } else {
+        setTimeout(() => setSearchProgress('🤖 AI analyzing company...'), 500);
+        setTimeout(() => setSearchProgress('🚀 Step 1: Trying direct profile URLs...'), 1500);
+        setTimeout(() => setSearchProgress('🌐 Step 2: Finding website...'), 3000);
+        setTimeout(() => setSearchProgress('📋 Step 3: Crawling and extracting...'), 5000);
+        setTimeout(() => setSearchProgress('✅ Processing results...'), 7000);
+      }
 
       const response = await axios.post<EnrichResult>('/api/enrich', {
         company: companyInput,
@@ -311,6 +411,29 @@ export default function Home() {
     const controller = new AbortController();
     abortControllerRef.current = controller;
 
+    // Validate AI method requirements for bulk processing
+    if (method === 'ai' || method === 'hybrid') {
+      if (aiProvider === 'openrouter') {
+        if (!apiKey && !hasEnvKeys.openrouter) {
+          setErrorMessage('🔑 AI method requires an OpenRouter API key. Please enter your API key above or set it in environment variables.');
+          return;
+        }
+        if (availableModels.length === 0) {
+          setErrorMessage('⚠️ Please fetch AI models first by clicking the "Fetch Models" button.');
+          return;
+        }
+        if (!selectedModel) {
+          setErrorMessage('⚠️ Please select an AI model from the dropdown.');
+          return;
+        }
+      } else if (aiProvider === 'gemini') {
+        if (!geminiApiKey && !hasEnvKeys.gemini) {
+          setErrorMessage('🔑 AI method requires a Google Gemini API key. Please enter your API key above or set it in environment variables.');
+          return;
+        }
+      }
+    }
+
     const fileExtension = bulkFile.name.split('.').pop()?.toLowerCase();
     let companies: string[] = [];
 
@@ -404,7 +527,13 @@ export default function Home() {
           
           const response = await axios.post<EnrichResult>('/api/enrich', {
             company: company,
+            method: method,
+            aiProvider: aiProvider,
+            apiKey: apiKey || undefined,
+            geminiApiKey: geminiApiKey || undefined,
+            customPrompt: customPrompt || undefined,
             platforms: selectedPlatforms,
+            model: selectedModel,
             fast_mode: true, // Enable fast mode for bulk processing
             fields_to_extract: fieldsToExtract, // Only extract selected fields
           }, {
@@ -508,11 +637,9 @@ export default function Home() {
       </Head>
 
       <main className={`min-h-screen transition-colors ${darkMode ? 'bg-gray-900' : 'bg-gradient-to-b from-blue-50 to-white'}`}>
-        {/* Sidebar */}
-        <div className={`fixed top-0 right-0 h-full w-96 bg-white shadow-2xl transform transition-transform duration-300 ease-in-out z-50 overflow-y-auto ${
-          showSidebar ? 'translate-x-0' : 'translate-x-full'
-        }`}>
-          <div className="p-6">
+        {/* Sidebar and overlay removed - pure web scraping only */}
+
+        <div className="container mx-auto px-4 py-8 max-w-6xl">
             {/* Sidebar Header */}
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
@@ -778,170 +905,7 @@ export default function Home() {
 
           {/* API Keys and settings moved to sidebar */}
 
-          {/* Method Selection - Simplified */}
-          <div className="bg-white rounded-lg shadow-md p-6 mb-6 max-w-2xl mx-auto">
-            <div className="mb-6">
-              <label className="block text-lg font-bold text-gray-800 mb-4">
-                Choose Search Method
-              </label>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <label className={`cursor-pointer p-4 border-2 rounded-xl hover:shadow-md transition-all ${
-                  method === 'extraction' ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-blue-300'
-                }`}>
-                  <input
-                    type="radio"
-                    value="extraction"
-                    checked={method === 'extraction'}
-                    onChange={(e) => setMethod(e.target.value as 'extraction' | 'ai' | 'hybrid')}
-                    className="sr-only"
-                  />
-                  <div className="text-center">
-                    <div className="text-2xl mb-2">⚡</div>
-                    <div className="font-bold text-gray-800 mb-1">Extraction</div>
-                    <div className="text-xs text-gray-600 mb-2">Fast & Free</div>
-                    <div className="text-xs text-green-600 font-medium">✓ No API key</div>
-                  </div>
-                </label>
-                <label className={`cursor-pointer p-4 border-2 rounded-xl hover:shadow-md transition-all ${
-                  method === 'ai' ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:border-blue-300'
-                }`}>
-                  <input
-                    type="radio"
-                    value="ai"
-                    checked={method === 'ai'}
-                    onChange={(e) => setMethod(e.target.value as 'extraction' | 'ai' | 'hybrid')}
-                    className="sr-only"
-                  />
-                  <div className="text-center">
-                    <div className="text-2xl mb-2">🤖</div>
-                    <div className="font-bold text-gray-800 mb-1">AI Only</div>
-                    <div className="text-xs text-gray-600 mb-2">Intelligent</div>
-                    <div className="text-xs text-blue-600 font-medium">⚡ API key needed</div>
-                  </div>
-                </label>
-                <label className={`cursor-pointer p-4 border-2 rounded-xl hover:shadow-md transition-all ${
-                  method === 'hybrid' ? 'border-purple-500 bg-purple-50' : 'border-gray-200 hover:border-purple-300'
-                }`}>
-                  <input
-                    type="radio"
-                    value="hybrid"
-                    checked={method === 'hybrid'}
-                    onChange={(e) => setMethod(e.target.value as 'extraction' | 'ai' | 'hybrid')}
-                    className="sr-only"
-                  />
-                  <div className="text-center">
-                    <div className="text-2xl mb-2">🚀</div>
-                    <div className="font-bold text-gray-800 mb-1">Hybrid</div>
-                    <div className="text-xs text-gray-600 mb-2">Best Quality</div>
-                    <div className="text-xs text-purple-600 font-medium">⭐ Recommended</div>
-                  </div>
-                </label>
-              </div>
-            </div>
-
-            {/* AI Provider Selection */}
-            {(method === 'ai' || method === 'hybrid') && (
-              <div className="mb-4">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  AI Provider
-                </label>
-                <div className="flex gap-4">
-                  <label className="flex items-center cursor-pointer">
-                    <input
-                      type="radio"
-                      value="openrouter"
-                      checked={aiProvider === 'openrouter'}
-                      onChange={(e) => setAiProvider(e.target.value as 'openrouter' | 'gemini')}
-                      className="mr-2"
-                    />
-                    <span className="text-sm">
-                      <strong>OpenRouter</strong> - Free models available 🆓
-                    </span>
-                  </label>
-                  <label className="flex items-center cursor-pointer">
-                    <input
-                      type="radio"
-                      value="gemini"
-                      checked={aiProvider === 'gemini'}
-                      onChange={(e) => setAiProvider(e.target.value as 'openrouter' | 'gemini')}
-                      className="mr-2"
-                    />
-                    <span className="text-sm">
-                      <strong>Google Gemini</strong> - Premium quality ⭐
-                    </span>
-                  </label>
-                </div>
-              </div>
-            )}
-
-            {/* AI Model Selection (OpenRouter only) - Show for AI and Hybrid methods */}
-            {(method === 'ai' || method === 'hybrid') && aiProvider === 'openrouter' && (
-              <div className="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                <div className="flex items-center justify-between mb-2">
-                  <label className="block text-sm font-medium text-gray-700">
-                    AI Model
-                  </label>
-                  <button
-                    onClick={fetchModels}
-                    disabled={loadingModels}
-                    className="text-xs px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:bg-gray-400 flex items-center gap-1"
-                  >
-                    {loadingModels ? (
-                      <>
-                        <Loader2 className="w-3 h-3 animate-spin" />
-                        Loading...
-                      </>
-                    ) : (
-                      <>
-                        <RefreshCw className="w-3 h-3" />
-                        Fetch Models
-                      </>
-                    )}
-                  </button>
-                </div>
-                
-                {loadingModels ? (
-                  <div className="flex items-center justify-center py-4">
-                    <Loader2 className="w-5 h-5 animate-spin text-blue-600 mr-2" />
-                    <span className="text-sm text-gray-600">Loading AI models...</span>
-                  </div>
-                ) : availableModels.length > 0 ? (
-                  <>
-                    <select
-                      value={selectedModel}
-                      onChange={(e) => setSelectedModel(e.target.value)}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent text-sm"
-                    >
-                      {availableModels.map((model) => (
-                        <option key={model.id} value={model.id}>
-                          {model.isFree ? '🆓 ' : ''}{model.name}
-                        </option>
-                      ))}
-                    </select>
-                    <p className="text-xs text-gray-500 mt-2">
-                      💡 <strong>Free models</strong> are marked with 🆓 - perfect for freelancers!
-                    </p>
-                    <p className="text-xs text-green-600 mt-1">
-                      ✅ Selected: <strong>{availableModels.find(m => m.id === selectedModel)?.name || selectedModel}</strong>
-                    </p>
-                  </>
-                ) : (
-                  <div className="space-y-2">
-                    <p className="text-xs text-gray-600">
-                      Click "Fetch Models" to load available AI models from OpenRouter (includes free models!)
-                    </p>
-                    {(apiKey || hasEnvKeys.openrouter) && (
-                      <p className="text-xs text-blue-600">
-                        💡 API key detected - models will auto-fetch when you select AI or Hybrid method
-                      </p>
-                    )}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Advanced settings moved to sidebar */}
-          </div>
+          {/* Method selection removed - pure web scraping only */}
 
           {/* Tabs */}
           <div className="flex justify-center mb-6">
