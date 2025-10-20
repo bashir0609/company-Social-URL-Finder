@@ -647,8 +647,8 @@ export default function Home() {
   return (
     <>
       <Head>
-        <title>Company Social URL Finder</title>
-        <meta name="description" content="Find official social media profiles for any company" />
+        <title>Company Data Extractor - Social URLs & Contact Info</title>
+        <meta name="description" content="Extract company data: social media profiles, contact information, and website details" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <link rel="icon" href="/favicon.ico" />
       </Head>
@@ -881,10 +881,10 @@ export default function Home() {
           <div className="flex justify-between items-start mb-8">
             <div className="flex-1 text-center">
               <h1 className={`text-4xl font-bold mb-2 ${darkMode ? 'text-blue-400' : 'text-primary'}`}>
-                🔍 Company Social URL Finder
+                🔍 Company Data Extractor
               </h1>
               <p className={darkMode ? 'text-gray-300' : 'text-gray-600'}>
-                Find official social media profiles and contact pages for any company
+                Extract social media profiles, contact information, and website details from any company
               </p>
               <div className="mt-2 text-xs text-gray-500">
                 ⌨️ Shortcuts: <kbd className="px-2 py-1 bg-gray-200 dark:bg-gray-700 rounded">Ctrl+K</kbd> Focus | <kbd className="px-2 py-1 bg-gray-200 dark:bg-gray-700 rounded">Ctrl+Enter</kbd> Search | <kbd className="px-2 py-1 bg-gray-200 dark:bg-gray-700 rounded">Esc</kbd> Clear
