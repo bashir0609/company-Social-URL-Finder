@@ -13,6 +13,7 @@ import * as XLSX from 'xlsx';
 interface EnrichResult {
   company_name: string;
   website: string;
+  company_domain: string;
   contact_page: string;
   email: string;
   phone: string;
@@ -23,10 +24,6 @@ interface EnrichResult {
   youtube: string;
   tiktok: string;
   pinterest: string;
-  github: string;
-  discord: string;
-  keywords?: string[];
-  status: string;
 }
 
 export default function Home() {
@@ -65,6 +62,18 @@ export default function Home() {
   const [bulkProcessing, setBulkProcessing] = useState(false);
   const [bulkProgressLog, setBulkProgressLog] = useState<string[]>([]);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
+  const [visibleColumns, setVisibleColumns] = useState<string[]>([
+    'company_name', 'website', 'company_domain', 'contact_page', 'email', 'phone',
+    'linkedin', 'facebook', 'twitter', 'instagram', 'youtube', 'tiktok', 'pinterest'
+  ]);
+  const [showColumnSelector, setShowColumnSelector] = useState(false);
+  const [fieldsToExtract, setFieldsToExtract] = useState<string[]>([
+    'website', 'company_domain', 'contact_page', 'email', 'phone',
+    'linkedin', 'facebook', 'twitter', 'instagram', 'youtube', 'tiktok', 'pinterest'
+  ]);
+  const [showFieldSelector, setShowFieldSelector] = useState(false);
 
   // Load recent searches, dark mode, and visitor stats from localStorage
   useEffect(() => {
@@ -285,20 +294,20 @@ export default function Home() {
         setTimeout(() => setSearchProgress('🔍 Searching social profiles...'), 1500);
         setTimeout(() => setSearchProgress('✅ Processing results...'), 2500);
       } else if (method === 'extraction') {
-        setTimeout(() => setSearchProgress('🌐 Finding website...'), 500);
-        setTimeout(() => setSearchProgress('📋 Step 1: Crawling menu links...'), 2000);
-        setTimeout(() => setSearchProgress('🔍 Step 2: Identifying important pages...'), 4000);
-        setTimeout(() => setSearchProgress('📄 Step 3: Scraping contact, about, privacy pages...'), 6000);
-        setTimeout(() => setSearchProgress('🔗 Step 4: Extracting social links and contact info...'), 8000);
-        setTimeout(() => setSearchProgress('🔎 Step 5: Searching for missing social profiles...'), 10000);
+        setTimeout(() => setSearchProgress('🚀 Step 1: Trying direct profile URLs...'), 500);
+        setTimeout(() => setSearchProgress('🌐 Step 2: Finding company website...'), 2000);
+        setTimeout(() => setSearchProgress('📋 Step 3: Crawling website menu links...'), 4000);
+        setTimeout(() => setSearchProgress('🔍 Step 3: Scraping contact, about pages...'), 6000);
+        setTimeout(() => setSearchProgress('🔗 Step 3: Extracting social links and contact info...'), 8000);
+        setTimeout(() => setSearchProgress('🔎 Step 4: Search engine fallback for missing data...'), 10000);
         setTimeout(() => setSearchProgress('📊 Finalizing keywords and data...'), 12000);
         setTimeout(() => setSearchProgress('✅ Processing results...'), 14000);
       } else {
         setTimeout(() => setSearchProgress('🤖 AI analyzing company...'), 500);
-        setTimeout(() => setSearchProgress('🌐 Finding website...'), 2000);
-        setTimeout(() => setSearchProgress('📋 Crawling menu links...'), 4000);
-        setTimeout(() => setSearchProgress('📄 Scraping multiple pages...'), 6000);
-        setTimeout(() => setSearchProgress('✅ Processing results...'), 8000);
+        setTimeout(() => setSearchProgress('🚀 Step 1: Trying direct profile URLs...'), 1500);
+        setTimeout(() => setSearchProgress('🌐 Step 2: Finding website...'), 3000);
+        setTimeout(() => setSearchProgress('📋 Step 3: Crawling and extracting...'), 5000);
+        setTimeout(() => setSearchProgress('✅ Processing results...'), 7000);
       }
 
       const response = await axios.post<EnrichResult>('/api/enrich', {
@@ -513,106 +522,125 @@ export default function Home() {
   };
 
   const processBulkCompanies = async (companies: string[]) => {
-    const results: EnrichResult[] = [];
+    const results: EnrichResult[] = new Array(companies.length);
+    const BATCH_SIZE = 5; // Process 5 companies in parallel
+    let completedCount = 0;
     
     setBulkProgressLog(prev => [...prev, `📊 Starting bulk enrichment for ${companies.length} companies...`]);
+    setBulkProgressLog(prev => [...prev, `⚡ Using parallel processing (${BATCH_SIZE} concurrent requests)...`]);
     
-    for (let i = 0; i < companies.length; i++) {
+    // Process companies in batches
+    for (let batchStart = 0; batchStart < companies.length; batchStart += BATCH_SIZE) {
       // Check if aborted
       if (abortControllerRef.current?.signal.aborted) {
-        setBulkProgressLog(prev => [...prev, `⛔ Processing stopped by user at ${i}/${companies.length}`]);
+        setBulkProgressLog(prev => [...prev, `⛔ Processing stopped by user at ${completedCount}/${companies.length}`]);
         setBulkProcessing(false);
         return;
       }
       
-      const company = companies[i];
-      setBulkProgressLog(prev => [...prev, `\n🔍 [${i + 1}/${companies.length}] Processing: ${company}`]);
+      const batchEnd = Math.min(batchStart + BATCH_SIZE, companies.length);
+      const batch = companies.slice(batchStart, batchEnd);
       
-      // Show extraction steps based on method
-      if (method === 'ai' || method === 'hybrid') {
-        setBulkProgressLog(prev => [...prev, `   🤖 AI Method: ${aiProvider === 'openrouter' ? 'OpenRouter' : 'Google Gemini'}`]);
-        if (aiProvider === 'openrouter' && selectedModel) {
-          setBulkProgressLog(prev => [...prev, `   🎯 Model: ${selectedModel}`]);
+      setBulkProgressLog(prev => [...prev, `\n🔄 Processing batch ${Math.floor(batchStart / BATCH_SIZE) + 1} (${batch.length} companies)...`]);
+      
+      // Process batch in parallel
+      const batchPromises = batch.map(async (company, batchIndex) => {
+        const globalIndex = batchStart + batchIndex;
+        
+        try {
+          setBulkProgressLog(prev => [...prev, `   🔍 [${globalIndex + 1}/${companies.length}] ${company}`]);
+          
+          const response = await axios.post<EnrichResult>('/api/enrich', {
+            company: company,
+            method: method,
+            aiProvider: aiProvider,
+            apiKey: apiKey || undefined,
+            geminiApiKey: geminiApiKey || undefined,
+            customPrompt: customPrompt || undefined,
+            platforms: selectedPlatforms,
+            model: selectedModel,
+            fast_mode: true, // Enable fast mode for bulk processing
+            fields_to_extract: fieldsToExtract, // Only extract selected fields
+          }, {
+            signal: abortControllerRef.current?.signal, // Pass abort signal to axios
+          });
+          
+          results[globalIndex] = response.data;
+          
+          // Log key findings
+          const findings: string[] = [];
+          if (response.data.website) findings.push(`website`);
+          if (response.data.email !== 'Not found') findings.push(`email`);
+          if (response.data.linkedin !== 'Not found') findings.push(`LinkedIn`);
+          if (response.data.facebook !== 'Not found') findings.push(`Facebook`);
+          if (response.data.twitter !== 'Not found') findings.push(`Twitter`);
+          
+          if (findings.length > 0) {
+            setBulkProgressLog(prev => [...prev, `   ✅ [${globalIndex + 1}] Found: ${findings.join(', ')}`]);
+          } else {
+            setBulkProgressLog(prev => [...prev, `   ⚠️ [${globalIndex + 1}] Limited data found`]);
+          }
+          
+          return response.data;
+        } catch (error: any) {
+          // Check if request was cancelled by user
+          if (axios.isCancel(error) || error.name === 'CanceledError') {
+            setBulkProgressLog(prev => [...prev, `   ⛔ [${globalIndex + 1}] Cancelled: ${company}`]);
+            throw error; // Re-throw to stop batch processing
+          }
+          
+          setBulkProgressLog(prev => [...prev, `   ❌ [${globalIndex + 1}] Error: ${company}`]);
+          
+          const errorResult: EnrichResult = {
+            company_name: company,
+            website: '',
+            company_domain: '',
+            contact_page: 'Not found',
+            email: 'Not found',
+            phone: 'Not found',
+            linkedin: 'Not found',
+            facebook: 'Not found',
+            twitter: 'Not found',
+            instagram: 'Not found',
+            youtube: 'Not found',
+            tiktok: 'Not found',
+            pinterest: 'Not found',
+          };
+          
+          results[globalIndex] = errorResult;
+          return errorResult;
         }
-        if (customPrompt) {
-          setBulkProgressLog(prev => [...prev, `   📝 Using custom prompt: "${customPrompt.substring(0, 50)}${customPrompt.length > 50 ? '...' : ''}"`]);
-        } else {
-          setBulkProgressLog(prev => [...prev, `   📝 Using default prompt`]);
-        }
-        setBulkProgressLog(prev => [...prev, `   🤖 Sending request to AI...`]);
-        await new Promise(resolve => setTimeout(resolve, 100));
-      }
+      });
       
-      if (method === 'extraction' || method === 'hybrid') {
-        setBulkProgressLog(prev => [...prev, `   🌐 Finding website...`]);
-        await new Promise(resolve => setTimeout(resolve, 100));
-        setBulkProgressLog(prev => [...prev, `   📋 Crawling menu links...`]);
-        await new Promise(resolve => setTimeout(resolve, 100));
-        setBulkProgressLog(prev => [...prev, `   🔍 Identifying important pages (contact, about, privacy)...`]);
-        await new Promise(resolve => setTimeout(resolve, 100));
-        setBulkProgressLog(prev => [...prev, `   📄 Scraping multiple pages...`]);
-        await new Promise(resolve => setTimeout(resolve, 100));
-        setBulkProgressLog(prev => [...prev, `   🔗 Extracting social links and contact info...`]);
-        await new Promise(resolve => setTimeout(resolve, 100));
-        setBulkProgressLog(prev => [...prev, `   🔎 Trying direct profile URLs...`]);
-        await new Promise(resolve => setTimeout(resolve, 100));
-        setBulkProgressLog(prev => [...prev, `   🔍 Search engine fallback for missing data...`]);
-      }
-      
+      // Wait for all requests in this batch to complete
       try {
-        const response = await axios.post<EnrichResult>('/api/enrich', {
-          company: company,
-          method: method,
-          aiProvider: aiProvider,
-          apiKey: apiKey || undefined,
-          geminiApiKey: geminiApiKey || undefined,
-          customPrompt: customPrompt || undefined,
-          platforms: selectedPlatforms,
-          model: selectedModel,
-        });
-        
-        results.push(response.data);
-        
-        // Log what was found
-        if (response.data.website) {
-          setBulkProgressLog(prev => [...prev, `   ✅ Found website: ${response.data.website}`]);
+        await Promise.all(batchPromises);
+      } catch (error: any) {
+        // If any request was cancelled, stop processing
+        if (axios.isCancel(error) || error.name === 'CanceledError') {
+          setBulkProgressLog(prev => [...prev, `\n⛔ Bulk processing cancelled by user`]);
+          setBulkProcessing(false);
+          abortControllerRef.current = null;
+          return;
         }
-        if (response.data.email !== 'Not found') {
-          setBulkProgressLog(prev => [...prev, `   📧 Found email: ${response.data.email}`]);
-        }
-        if (response.data.linkedin !== 'Not found') {
-          setBulkProgressLog(prev => [...prev, `   🔗 Found LinkedIn: ${response.data.linkedin}`]);
-        }
-        if (response.data.contact_page !== 'Not found') {
-          setBulkProgressLog(prev => [...prev, `   📞 Found contact page: ${response.data.contact_page}`]);
-        }
-        
-      } catch (error) {
-        setBulkProgressLog(prev => [...prev, `   ❌ Error processing ${company}`]);
-        results.push({
-          company_name: company,
-          website: '',
-          contact_page: 'Not found',
-          email: 'Not found',
-          phone: 'Not found',
-          linkedin: 'Not found',
-          facebook: 'Not found',
-          twitter: 'Not found',
-          instagram: 'Not found',
-          youtube: 'Not found',
-          tiktok: 'Not found',
-          pinterest: 'Not found',
-          github: 'Not found',
-          discord: 'Not found',
-          status: 'Error',
-        });
+        // For other errors, continue processing
       }
       
-      setBulkProgress(((i + 1) / companies.length) * 100);
-      setBulkResults([...results]);
+      completedCount += batch.length;
+      setBulkProgress((completedCount / companies.length) * 100);
+      
+      // Update results display
+      setBulkResults(results.filter(r => r !== undefined));
+      
+      setBulkProgressLog(prev => [...prev, `✅ Batch complete: ${completedCount}/${companies.length} processed`]);
+      
+      // Small delay between batches to avoid overwhelming the server
+      if (batchEnd < companies.length) {
+        await new Promise(resolve => setTimeout(resolve, 500));
+      }
     }
     
-    setBulkProgressLog(prev => [...prev, `\n✅ Bulk enrichment completed! Processed ${companies.length} companies.`]);
+    setBulkProgressLog(prev => [...prev, `\n🎉 Bulk enrichment completed! Processed ${companies.length} companies.`]);
     setBulkProcessing(false);
     abortControllerRef.current = null;
   };
@@ -1433,12 +1461,90 @@ export default function Home() {
                     </div>
                   )}
                   
+                  {/* Field Selector - Choose what data to extract */}
+                  <div className="mb-4 p-4 bg-blue-50 rounded-lg border border-blue-200">
+                    <div className="flex justify-between items-center mb-3">
+                      <label className="block text-sm font-medium text-gray-700">
+                        ⚡ Select fields to extract (fewer fields = faster processing)
+                      </label>
+                      <button
+                        onClick={() => setShowFieldSelector(!showFieldSelector)}
+                        className="text-sm text-primary hover:underline font-medium"
+                      >
+                        {showFieldSelector ? 'Hide' : 'Show'} Options
+                      </button>
+                    </div>
+                    
+                    {showFieldSelector && (
+                      <div>
+                        <div className="grid grid-cols-2 md:grid-cols-3 gap-2 mb-3">
+                          {[
+                            { key: 'website', label: 'Website' },
+                            { key: 'company_domain', label: 'Domain' },
+                            { key: 'contact_page', label: 'Contact Page' },
+                            { key: 'email', label: 'Email' },
+                            { key: 'phone', label: 'Phone' },
+                            { key: 'linkedin', label: 'LinkedIn' },
+                            { key: 'facebook', label: 'Facebook' },
+                            { key: 'twitter', label: 'Twitter' },
+                            { key: 'instagram', label: 'Instagram' },
+                            { key: 'youtube', label: 'YouTube' },
+                            { key: 'tiktok', label: 'TikTok' },
+                            { key: 'pinterest', label: 'Pinterest' },
+                          ].map(field => (
+                            <label key={field.key} className="flex items-center gap-2 cursor-pointer hover:bg-white p-2 rounded">
+                              <input
+                                type="checkbox"
+                                checked={fieldsToExtract.includes(field.key)}
+                                onChange={(e) => {
+                                  if (e.target.checked) {
+                                    setFieldsToExtract([...fieldsToExtract, field.key]);
+                                  } else {
+                                    setFieldsToExtract(fieldsToExtract.filter(f => f !== field.key));
+                                  }
+                                }}
+                                className="w-4 h-4"
+                              />
+                              <span className="text-sm">{field.label}</span>
+                            </label>
+                          ))}
+                        </div>
+                        
+                        <div className="flex gap-2 flex-wrap">
+                          <button
+                            onClick={() => setFieldsToExtract(['website', 'company_domain', 'contact_page', 'email', 'phone', 'linkedin', 'facebook', 'twitter', 'instagram', 'youtube', 'tiktok', 'pinterest'])}
+                            className="px-3 py-1 bg-gray-200 text-gray-700 rounded text-xs hover:bg-gray-300"
+                          >
+                            Select All
+                          </button>
+                          <button
+                            onClick={() => setFieldsToExtract(['website', 'linkedin', 'email'])}
+                            className="px-3 py-1 bg-gray-200 text-gray-700 rounded text-xs hover:bg-gray-300"
+                          >
+                            Essential Only
+                          </button>
+                          <button
+                            onClick={() => setFieldsToExtract(['linkedin', 'facebook', 'twitter', 'instagram', 'youtube', 'tiktok', 'pinterest'])}
+                            className="px-3 py-1 bg-gray-200 text-gray-700 rounded text-xs hover:bg-gray-300"
+                          >
+                            Social Media Only
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                    
+                    <p className="mt-2 text-xs text-gray-600">
+                      💡 Selected: <strong>{fieldsToExtract.length} fields</strong> | Fewer fields = faster processing
+                    </p>
+                  </div>
+                  
                   <div className="flex gap-3">
                     <button
                       onClick={processBulkFile}
                       disabled={!selectedColumn || bulkProcessing}
                       className="px-6 py-3 bg-primary text-white rounded-lg font-medium hover:bg-blue-600 disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center gap-2"
                     >
+                      <Upload className="w-4 h-4" />
                       {bulkProcessing ? 'Processing...' : 'Start Bulk Enrichment'}
                     </button>
                     
@@ -1448,7 +1554,7 @@ export default function Home() {
                         className="px-6 py-3 bg-red-600 text-white rounded-lg font-medium hover:bg-red-700 flex items-center gap-2"
                       >
                         <X className="w-4 h-4" />
-                        Stop
+                        Stop Processing
                       </button>
                     )}
                   </div>
@@ -1488,13 +1594,106 @@ export default function Home() {
                 </div>
               )}
 
-              {bulkResults.length > 0 && (
+              {bulkResults.length > 0 && (() => {
+                const totalPages = Math.ceil(bulkResults.length / itemsPerPage);
+                const startIndex = (currentPage - 1) * itemsPerPage;
+                const endIndex = startIndex + itemsPerPage;
+                const paginatedResults = bulkResults.slice(startIndex, endIndex);
+                
+                return (
                 <div>
                   <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-lg font-semibold">
-                      Results ({bulkResults.length} companies)
-                    </h3>
+                    <div>
+                      <h3 className="text-lg font-semibold">
+                        Results ({bulkResults.length} companies)
+                      </h3>
+                      <p className="text-sm text-gray-500 mt-1">
+                        Showing {startIndex + 1}-{Math.min(endIndex, bulkResults.length)} of {bulkResults.length}
+                      </p>
+                    </div>
                     <div className="flex gap-2">
+                      <div className="relative">
+                        <button
+                          onClick={() => setShowColumnSelector(!showColumnSelector)}
+                          className="px-4 py-2 bg-gray-600 text-white rounded-lg font-medium hover:bg-gray-700 flex items-center gap-2"
+                        >
+                          <Settings className="w-4 h-4" />
+                          Columns
+                        </button>
+                        {showColumnSelector && (
+                          <div className="absolute right-0 mt-2 w-64 bg-white border border-gray-300 rounded-lg shadow-lg z-10 p-4">
+                            <div className="flex justify-between items-center mb-3">
+                              <h4 className="font-semibold text-sm">Select Columns</h4>
+                              <button
+                                onClick={() => setShowColumnSelector(false)}
+                                className="text-gray-500 hover:text-gray-700"
+                              >
+                                <X className="w-4 h-4" />
+                              </button>
+                            </div>
+                            <div className="space-y-2 max-h-96 overflow-y-auto">
+                              {[
+                                { key: 'company_name', label: 'Company Name' },
+                                { key: 'website', label: 'Website' },
+                                { key: 'company_domain', label: 'Domain' },
+                                { key: 'contact_page', label: 'Contact Page' },
+                                { key: 'email', label: 'Email' },
+                                { key: 'phone', label: 'Phone' },
+                                { key: 'linkedin', label: 'LinkedIn' },
+                                { key: 'facebook', label: 'Facebook' },
+                                { key: 'twitter', label: 'Twitter' },
+                                { key: 'instagram', label: 'Instagram' },
+                                { key: 'youtube', label: 'YouTube' },
+                                { key: 'tiktok', label: 'TikTok' },
+                                { key: 'pinterest', label: 'Pinterest' },
+                              ].map(col => (
+                                <label key={col.key} className="flex items-center gap-2 cursor-pointer hover:bg-gray-50 p-1 rounded">
+                                  <input
+                                    type="checkbox"
+                                    checked={visibleColumns.includes(col.key)}
+                                    onChange={(e) => {
+                                      if (e.target.checked) {
+                                        setVisibleColumns([...visibleColumns, col.key]);
+                                      } else {
+                                        setVisibleColumns(visibleColumns.filter(c => c !== col.key));
+                                      }
+                                    }}
+                                    className="w-4 h-4"
+                                  />
+                                  <span className="text-sm">{col.label}</span>
+                                </label>
+                              ))}
+                            </div>
+                            <div className="mt-3 pt-3 border-t flex gap-2">
+                              <button
+                                onClick={() => setVisibleColumns(['company_name', 'website', 'company_domain', 'contact_page', 'email', 'phone', 'linkedin', 'facebook', 'twitter', 'instagram', 'youtube', 'tiktok', 'pinterest'])}
+                                className="flex-1 px-3 py-1 bg-gray-200 text-gray-700 rounded text-xs hover:bg-gray-300"
+                              >
+                                Select All
+                              </button>
+                              <button
+                                onClick={() => setVisibleColumns(['company_name', 'website'])}
+                                className="flex-1 px-3 py-1 bg-gray-200 text-gray-700 rounded text-xs hover:bg-gray-300"
+                              >
+                                Reset
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                      <select
+                        value={itemsPerPage}
+                        onChange={(e) => {
+                          setItemsPerPage(Number(e.target.value));
+                          setCurrentPage(1);
+                        }}
+                        className="px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                      >
+                        <option value={10}>10 per page</option>
+                        <option value={25}>25 per page</option>
+                        <option value={50}>50 per page</option>
+                        <option value={100}>100 per page</option>
+                      </select>
                       <button
                         onClick={() => exportToCSV(bulkResults)}
                         className="px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 flex items-center gap-2"
@@ -1516,158 +1715,163 @@ export default function Home() {
                     <table className="min-w-full divide-y divide-gray-200">
                       <thead className="bg-gray-50">
                         <tr>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Company</th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Website</th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Contact Page</th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Email</th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Phone</th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">LinkedIn</th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Facebook</th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Twitter</th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Instagram</th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">YouTube</th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">TikTok</th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">GitHub</th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Pinterest</th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Discord</th>
-                          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                          {visibleColumns.includes('company_name') && <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Company Name</th>}
+                          {visibleColumns.includes('website') && <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Website</th>}
+                          {visibleColumns.includes('company_domain') && <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Domain</th>}
+                          {visibleColumns.includes('contact_page') && <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Contact Page</th>}
+                          {visibleColumns.includes('email') && <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Email</th>}
+                          {visibleColumns.includes('phone') && <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Phone</th>}
+                          {visibleColumns.includes('linkedin') && <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">LinkedIn</th>}
+                          {visibleColumns.includes('facebook') && <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Facebook</th>}
+                          {visibleColumns.includes('twitter') && <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Twitter</th>}
+                          {visibleColumns.includes('instagram') && <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Instagram</th>}
+                          {visibleColumns.includes('youtube') && <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">YouTube</th>}
+                          {visibleColumns.includes('tiktok') && <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">TikTok</th>}
+                          {visibleColumns.includes('pinterest') && <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Pinterest</th>}
                         </tr>
                       </thead>
                       <tbody className="bg-white divide-y divide-gray-200">
-                        {bulkResults.map((result, index) => (
+                        {paginatedResults.map((result, index) => (
                           <tr key={index}>
-                            <td className="px-4 py-3 text-sm">{result.company_name}</td>
-                            <td className="px-4 py-3 text-sm">
-                              {result.website ? (
-                                <a href={result.website} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
-                                  Link
-                                </a>
-                              ) : (
-                                <span className="text-gray-400">-</span>
-                              )}
-                            </td>
-                            <td className="px-4 py-3 text-sm">
-                              {result.contact_page !== 'Not found' ? (
-                                <a href={result.contact_page} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
-                                  Link
-                                </a>
-                              ) : (
-                                <span className="text-gray-400">-</span>
-                              )}
-                            </td>
-                            <td className="px-4 py-3 text-sm">
-                              {result.email !== 'Not found' ? (
-                                <a href={`mailto:${result.email}`} className="text-primary hover:underline truncate max-w-xs block">
-                                  {result.email}
-                                </a>
-                              ) : (
-                                <span className="text-gray-400">-</span>
-                              )}
-                            </td>
-                            <td className="px-4 py-3 text-sm">
-                              {result.phone !== 'Not found' ? (
-                                <a href={`tel:${result.phone}`} className="text-primary hover:underline">
-                                  {result.phone}
-                                </a>
-                              ) : (
-                                <span className="text-gray-400">-</span>
-                              )}
-                            </td>
-                            <td className="px-4 py-3 text-sm">
-                              {result.linkedin !== 'Not found' ? (
-                                <a href={result.linkedin} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
-                                  Link
-                                </a>
-                              ) : (
-                                <span className="text-gray-400">-</span>
-                              )}
-                            </td>
-                            <td className="px-4 py-3 text-sm">
-                              {result.facebook !== 'Not found' ? (
-                                <a href={result.facebook} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
-                                  Link
-                                </a>
-                              ) : (
-                                <span className="text-gray-400">-</span>
-                              )}
-                            </td>
-                            <td className="px-4 py-3 text-sm">
-                              {result.twitter !== 'Not found' ? (
-                                <a href={result.twitter} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
-                                  Link
-                                </a>
-                              ) : (
-                                <span className="text-gray-400">-</span>
-                              )}
-                            </td>
-                            <td className="px-4 py-3 text-sm">
-                              {result.instagram !== 'Not found' ? (
-                                <a href={result.instagram} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
-                                  Link
-                                </a>
-                              ) : (
-                                <span className="text-gray-400">-</span>
-                              )}
-                            </td>
-                            <td className="px-4 py-3 text-sm">
-                              {result.youtube !== 'Not found' ? (
-                                <a href={result.youtube} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
-                                  Link
-                                </a>
-                              ) : (
-                                <span className="text-gray-400">-</span>
-                              )}
-                            </td>
-                            <td className="px-4 py-3 text-sm">
-                              {result.tiktok !== 'Not found' ? (
-                                <a href={result.tiktok} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
-                                  Link
-                                </a>
-                              ) : (
-                                <span className="text-gray-400">-</span>
-                              )}
-                            </td>
-                            <td className="px-4 py-3 text-sm">
-                              {result.github !== 'Not found' ? (
-                                <a href={result.github} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
-                                  Link
-                                </a>
-                              ) : (
-                                <span className="text-gray-400">-</span>
-                              )}
-                            </td>
-                            <td className="px-4 py-3 text-sm">
-                              {result.pinterest !== 'Not found' ? (
-                                <a href={result.pinterest} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
-                                  Link
-                                </a>
-                              ) : (
-                                <span className="text-gray-400">-</span>
-                              )}
-                            </td>
-                            <td className="px-4 py-3 text-sm">
-                              {result.discord !== 'Not found' ? (
-                                <a href={result.discord} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
-                                  Link
-                                </a>
-                              ) : (
-                                <span className="text-gray-400">-</span>
-                              )}
-                            </td>
-                            <td className="px-4 py-3 text-sm">
-                              <span className={`px-2 py-1 rounded text-xs ${
-                                result.status === 'Success' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                              }`}>
-                                {result.status}
-                              </span>
-                            </td>
+                            {visibleColumns.includes('company_name') && (
+                              <td className="px-4 py-3 text-sm">{result.company_name}</td>
+                            )}
+                            {visibleColumns.includes('website') && (
+                              <td className="px-4 py-3 text-sm">
+                                {result.website ? (
+                                  <a href={result.website} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Link</a>
+                                ) : <span className="text-gray-400">-</span>}
+                              </td>
+                            )}
+                            {visibleColumns.includes('company_domain') && (
+                              <td className="px-4 py-3 text-sm">{result.company_domain || '-'}</td>
+                            )}
+                            {visibleColumns.includes('contact_page') && (
+                              <td className="px-4 py-3 text-sm">
+                                {result.contact_page !== 'Not found' ? (
+                                  <a href={result.contact_page} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Link</a>
+                                ) : <span className="text-gray-400">-</span>}
+                              </td>
+                            )}
+                            {visibleColumns.includes('email') && (
+                              <td className="px-4 py-3 text-sm">
+                                {result.email !== 'Not found' ? (
+                                  <a href={`mailto:${result.email}`} className="text-primary hover:underline truncate max-w-xs block">{result.email}</a>
+                                ) : <span className="text-gray-400">-</span>}
+                              </td>
+                            )}
+                            {visibleColumns.includes('phone') && (
+                              <td className="px-4 py-3 text-sm">
+                                {result.phone !== 'Not found' ? (
+                                  <a href={`tel:${result.phone}`} className="text-primary hover:underline">{result.phone}</a>
+                                ) : <span className="text-gray-400">-</span>}
+                              </td>
+                            )}
+                            {visibleColumns.includes('linkedin') && (
+                              <td className="px-4 py-3 text-sm">
+                                {result.linkedin !== 'Not found' ? (
+                                  <a href={result.linkedin} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Link</a>
+                                ) : <span className="text-gray-400">-</span>}
+                              </td>
+                            )}
+                            {visibleColumns.includes('facebook') && (
+                              <td className="px-4 py-3 text-sm">
+                                {result.facebook !== 'Not found' ? (
+                                  <a href={result.facebook} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Link</a>
+                                ) : <span className="text-gray-400">-</span>}
+                              </td>
+                            )}
+                            {visibleColumns.includes('twitter') && (
+                              <td className="px-4 py-3 text-sm">
+                                {result.twitter !== 'Not found' ? (
+                                  <a href={result.twitter} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Link</a>
+                                ) : <span className="text-gray-400">-</span>}
+                              </td>
+                            )}
+                            {visibleColumns.includes('instagram') && (
+                              <td className="px-4 py-3 text-sm">
+                                {result.instagram !== 'Not found' ? (
+                                  <a href={result.instagram} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Link</a>
+                                ) : <span className="text-gray-400">-</span>}
+                              </td>
+                            )}
+                            {visibleColumns.includes('youtube') && (
+                              <td className="px-4 py-3 text-sm">
+                                {result.youtube !== 'Not found' ? (
+                                  <a href={result.youtube} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Link</a>
+                                ) : <span className="text-gray-400">-</span>}
+                              </td>
+                            )}
+                            {visibleColumns.includes('tiktok') && (
+                              <td className="px-4 py-3 text-sm">
+                                {result.tiktok !== 'Not found' ? (
+                                  <a href={result.tiktok} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Link</a>
+                                ) : <span className="text-gray-400">-</span>}
+                              </td>
+                            )}
+                            {visibleColumns.includes('pinterest') && (
+                              <td className="px-4 py-3 text-sm">
+                                {result.pinterest !== 'Not found' ? (
+                                  <a href={result.pinterest} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Link</a>
+                                ) : <span className="text-gray-400">-</span>}
+                              </td>
+                            )}
                           </tr>
                         ))}
                       </tbody>
                     </table>
                   </div>
+                  
+                  {/* Pagination Controls */}
+                  <div className="flex justify-between items-center mt-4">
+                    <button
+                      onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                      disabled={currentPage === 1}
+                      className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg font-medium hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      Previous
+                    </button>
+                    
+                    <div className="flex gap-2 items-center">
+                      {Array.from({ length: totalPages }, (_, i) => i + 1)
+                        .filter(page => {
+                          // Show first page, last page, current page, and pages around current
+                          return page === 1 || 
+                                 page === totalPages || 
+                                 Math.abs(page - currentPage) <= 1;
+                        })
+                        .map((page, idx, arr) => {
+                          // Add ellipsis
+                          const showEllipsisBefore = idx > 0 && page - arr[idx - 1] > 1;
+                          return (
+                            <div key={page} className="flex items-center gap-2">
+                              {showEllipsisBefore && <span className="text-gray-400">...</span>}
+                              <button
+                                onClick={() => setCurrentPage(page)}
+                                className={`px-3 py-1 rounded-lg font-medium ${
+                                  currentPage === page
+                                    ? 'bg-blue-600 text-white'
+                                    : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                                }`}
+                              >
+                                {page}
+                              </button>
+                            </div>
+                          );
+                        })}
+                    </div>
+                    
+                    <button
+                      onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                      disabled={currentPage === totalPages}
+                      className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg font-medium hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      Next
+                    </button>
+                  </div>
                 </div>
-              )}
+                );
+              })()}
             </div>
           )}
 

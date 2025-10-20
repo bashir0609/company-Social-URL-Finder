@@ -17,6 +17,7 @@ const SOCIAL_PLATFORMS = {
 interface EnrichResult {
   company_name: string;
   website: string;
+  company_domain: string;
   contact_page: string;
   email: string;
   phone: string;
@@ -27,10 +28,6 @@ interface EnrichResult {
   youtube: string;
   tiktok: string;
   pinterest: string;
-  github: string;
-  discord: string;
-  keywords?: string[];
-  status: string;
 }
 
 // Multiple user agents to rotate through for better success rate
@@ -84,6 +81,13 @@ async function fetchPageContent(url: string, retries = 3): Promise<string | null
       
       console.error(`Error fetching ${url} (attempt ${attempt + 1}/${retries}): ${errorMsg}`);
       
+      // Don't retry SSL certificate errors - they won't be fixed by retrying
+      const sslErrors = ['DEPTH_ZERO_SELF_SIGNED_CERT', 'CERT_HAS_EXPIRED', 'ERR_TLS_CERT_ALTNAME_INVALID', 'UNABLE_TO_VERIFY_LEAF_SIGNATURE'];
+      if (sslErrors.includes(error.code)) {
+        console.log('SSL certificate error - skipping retries');
+        return null;
+      }
+      
       // If it's a 404 or 403, don't retry
       if (error.response?.status === 404 || error.response?.status === 403) {
         console.log('Got 404/403, trying with www/non-www variant...');
@@ -115,14 +119,161 @@ async function fetchPageContent(url: string, retries = 3): Promise<string | null
       }
       
       if (attempt < retries - 1) {
-        // Exponential backoff: wait 2s, 4s, 8s
-        const waitTime = Math.pow(2, attempt + 1) * 1000;
+        // Reduced delays for faster bulk processing: wait 500ms, 1s
+        const waitTime = Math.pow(2, attempt) * 500;
         console.log(`Waiting ${waitTime}ms before retry...`);
         await new Promise(resolve => setTimeout(resolve, waitTime));
       }
     }
   }
   return null;
+}
+
+function extractCompanyName(html: string, fallbackDomain: string): string {
+  const $ = cheerio.load(html);
+  
+  // Generic phrases and errors that are NOT company names
+  const invalidPhrases = [
+    'stay tuned', 'coming soon', 'under construction', 'welcome', 'home page',
+    'loading', 'please wait', 'redirecting', 'homepage', 'main page',
+    // HTTP errors
+    '403', '404', '500', '502', '503', 'forbidden', 'not found', 'error',
+    'access denied', 'unauthorized', 'bad gateway', 'service unavailable',
+    // Generic page titles
+    'untitled', 'new page', 'default', 'index', 'test page', 'company'
+  ];
+  
+  const isValidCompanyName = (name: string): boolean => {
+    if (!name || name.length < 2 || name.length > 100) return false;
+    const lowerName = name.toLowerCase();
+    
+    // Check for invalid phrases
+    if (invalidPhrases.some(phrase => lowerName.includes(phrase))) return false;
+    
+    // Check if it's mostly numbers (like "403" or "404 error")
+    const digitCount = (name.match(/\d/g) || []).length;
+    if (digitCount > name.length / 2) return false;
+    
+    // Check if it contains common error patterns
+    if (/^\d{3}\s*[-–—]\s*/i.test(name)) return false; // "403 - Forbidden"
+    
+    return true;
+  };
+  
+  let companyName = '';
+  let source = '';
+  
+  // 1. Meta property og:site_name (most reliable)
+  const ogSiteName = $('meta[property="og:site_name"]').attr('content');
+  if (ogSiteName && isValidCompanyName(ogSiteName)) {
+    companyName = ogSiteName;
+    source = 'og:site_name';
+  }
+  
+  // 2. Meta name application-name
+  if (!companyName) {
+    const appName = $('meta[name="application-name"]').attr('content');
+    if (appName && isValidCompanyName(appName)) {
+      companyName = appName;
+      source = 'application-name';
+    }
+  }
+  
+  // 3. Brand/company name in header/nav
+  if (!companyName) {
+    const brandSelectors = [
+      '.navbar-brand', '.brand', '.site-title', '.company-name', 
+      '.logo-text', 'header .name', 'nav .brand-name', '.header-brand'
+    ];
+    for (const selector of brandSelectors) {
+      const brandText = $(selector).first().text().trim();
+      if (brandText && isValidCompanyName(brandText) && brandText.length < 50) {
+        companyName = brandText;
+        source = `brand-element (${selector})`;
+        break;
+      }
+    }
+  }
+  
+  // 4. Logo alt text (often more reliable than title)
+  if (!companyName) {
+    const logoSelectors = [
+      'img[alt*="logo" i]', 'img.logo', '.logo img', '.brand img', 
+      '.navbar-brand img', 'header img', '.site-logo img'
+    ];
+    for (const selector of logoSelectors) {
+      const logoAlt = $(selector).first().attr('alt');
+      if (logoAlt) {
+        const cleanedLogo = logoAlt.replace(/\s*logo\s*/gi, '').trim();
+        if (isValidCompanyName(cleanedLogo)) {
+          companyName = cleanedLogo;
+          source = `logo-alt (${selector})`;
+          break;
+        }
+      }
+    }
+  }
+  
+  // 5. H1 tag (if it looks like a company name)
+  if (!companyName) {
+    const h1 = $('h1').first().text().trim();
+    if (h1 && h1.length < 50 && isValidCompanyName(h1)) {
+      companyName = h1;
+      source = 'h1';
+    }
+  }
+  
+  // 6. Title tag (clean it up) - LAST because it's often misleading
+  if (!companyName) {
+    const title = $('title').text().trim();
+    if (title) {
+      // Try to extract company name from title
+      // Split by common separators and take the first part
+      const parts = title.split(/[\|\-–—]/);
+      for (const part of parts) {
+        const cleaned = part.trim();
+        if (isValidCompanyName(cleaned) && cleaned.length >= 3) {
+          companyName = cleaned;
+          source = 'title';
+          break;
+        }
+      }
+    }
+  }
+  
+  // 7. Fallback to formatted domain name (ALWAYS use if nothing else worked)
+  if (!companyName || companyName.trim().length === 0) {
+    const domainParts = fallbackDomain.split('.');
+    const mainPart = domainParts[0];
+    companyName = mainPart
+      .replace(/[-_]/g, ' ')
+      .split(' ')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+      .join(' ');
+    source = 'domain-fallback';
+  }
+  
+  // Clean up special characters and extra spaces
+  companyName = companyName
+    .replace(/®|™|©/g, '')  // Remove trademark symbols
+    .replace(/\s+/g, ' ')    // Normalize spaces
+    .trim();
+  
+  // Final validation - if still invalid, use domain
+  if (!isValidCompanyName(companyName)) {
+    const domainParts = fallbackDomain.split('.');
+    const mainPart = domainParts[0];
+    companyName = mainPart
+      .replace(/[-_]/g, ' ')
+      .split(' ')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+      .join(' ');
+    source = 'domain-fallback (after validation)';
+  }
+  
+  console.log(`📝 Company name extracted from ${source}: "${companyName}"`);
+  
+  return companyName;
 }
 
 function extractEmailAndPhone(html: string): { email: string; phone: string } {
@@ -1204,6 +1355,7 @@ export default async function handler(
     return res.status(405).json({
       company_name: '',
       website: '',
+      company_domain: '',
       contact_page: 'Not found',
       email: 'Not found',
       phone: 'Not found',
@@ -1214,13 +1366,21 @@ export default async function handler(
       youtube: 'Not found',
       tiktok: 'Not found',
       pinterest: 'Not found',
-      github: 'Not found',
-      discord: 'Not found',
-      status: 'Method not allowed',
     });
   }
 
-  const { company, method = 'extraction', apiKey, geminiApiKey, customPrompt, model, aiProvider = 'openrouter' } = req.body;
+  const { 
+    company, 
+    method = 'extraction', 
+    apiKey, 
+    model, 
+    platforms = [],
+    aiProvider = 'openrouter',
+    geminiApiKey,
+    customPrompt,
+    fast_mode = true, // Fast mode is now default for speed
+    fields_to_extract = [], // Fields user wants to extract
+  } = req.body;
 
   // Use API key from request body or environment variable
   const effectiveApiKey = apiKey || process.env.OPENROUTER_API_KEY;
@@ -1230,6 +1390,7 @@ export default async function handler(
     return res.status(400).json({
       company_name: '',
       website: '',
+      company_domain: '',
       contact_page: 'Not found',
       email: 'Not found',
       phone: 'Not found',
@@ -1240,15 +1401,44 @@ export default async function handler(
       youtube: 'Not found',
       tiktok: 'Not found',
       pinterest: 'Not found',
-      github: 'Not found',
-      discord: 'Not found',
-      status: 'Company name required',
     });
   }
 
+  // Extract clean company name from domain if input is a URL
+  let cleanCompanyName = company;
+  const isUrl = company.includes('.') && (company.startsWith('http') || company.startsWith('www') || company.match(/^[a-zA-Z0-9-]+\.[a-zA-Z]{2,}/));
+  
+  if (isUrl) {
+    try {
+      // Normalize URL first
+      let urlToProcess = company;
+      if (!company.startsWith('http')) {
+        urlToProcess = 'https://' + company;
+      }
+      const urlObj = new URL(urlToProcess);
+      const domain = urlObj.hostname.replace('www.', '');
+      
+      // Extract company name from domain (e.g., "cordial-cables.com" -> "Cordial Cables")
+      const domainParts = domain.split('.');
+      const mainPart = domainParts[0]; // Get the part before TLD
+      
+      // Convert hyphens/underscores to spaces and capitalize
+      cleanCompanyName = mainPart
+        .replace(/[-_]/g, ' ')
+        .split(' ')
+        .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+        .join(' ');
+      
+      console.log(`Extracted company name from domain: "${company}" -> "${cleanCompanyName}"`);
+    } catch (error) {
+      console.log('Could not parse domain, using original input as company name');
+    }
+  }
+
   const result: EnrichResult = {
-    company_name: company,
+    company_name: cleanCompanyName,
     website: '',
+    company_domain: '',
     contact_page: 'Not found',
     email: 'Not found',
     phone: 'Not found',
@@ -1259,9 +1449,6 @@ export default async function handler(
     youtube: 'Not found',
     tiktok: 'Not found',
     pinterest: 'Not found',
-    github: 'Not found',
-    discord: 'Not found',
-    status: 'Processing',
   };
 
   try {
@@ -1277,14 +1464,11 @@ export default async function handler(
         aiResults = await aiSearchSocialProfiles(company, effectiveApiKey, model, customPrompt);
       }
       
-      // Merge AI results into result object (including AI-generated keywords)
+      // Merge AI results into result object
       // BUT validate emails and phones before accepting them
       for (const [key, value] of Object.entries(aiResults)) {
         if (value && value !== 'Not found') {
-          if (key === 'keywords' && Array.isArray(value)) {
-            // Store AI-generated keywords
-            result.keywords = value;
-          } else if (key === 'email') {
+          if (key === 'email') {
             // Validate email format before accepting AI result
             const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
             if (emailRegex.test(value as string)) {
@@ -1311,9 +1495,9 @@ export default async function handler(
             } else {
               console.log(`Rejected invalid AI phone: ${value}`);
             }
-          } else if (key !== 'keywords') {
+          } else {
             // For social media links, only use AI if extraction didn't find anything
-            const socialFields = ['linkedin', 'facebook', 'twitter', 'instagram', 'youtube', 'tiktok', 'pinterest', 'github'];
+            const socialFields = ['linkedin', 'facebook', 'twitter', 'instagram', 'youtube', 'tiktok', 'pinterest'];
             
             if (socialFields.includes(key)) {
               // Only use AI social links if extraction didn't find them
@@ -1348,8 +1532,31 @@ export default async function handler(
       console.log('AI method: Using AI website discovery, then extracting real data from website');
     }
     
-    // EXTRACTION METHOD: Traditional web scraping
-    // Determine if input is URL or company name
+    // STEP 1: DIRECT SEARCH - Try direct profile URLs first (FASTEST METHOD)
+    console.log('🚀 STEP 1: Trying direct profile URLs...');
+    const allPlatforms = ['linkedin', 'twitter', 'facebook', 'instagram', 'youtube', 'tiktok', 'pinterest'];
+    
+    // Only search for platforms user wants to extract
+    const directSearchPlatforms = fields_to_extract.length > 0 
+      ? allPlatforms.filter(p => fields_to_extract.includes(p))
+      : allPlatforms;
+    
+    console.log(`Extracting ${directSearchPlatforms.length} platforms: ${directSearchPlatforms.join(', ')}`);
+    let directSearchSuccessCount = 0;
+    
+    for (const platform of directSearchPlatforms) {
+      const foundUrl = await searchSocialProfile(company, platform, '');
+      if (foundUrl) {
+        result[platform as keyof EnrichResult] = foundUrl as any;
+        directSearchSuccessCount++;
+        console.log(`✅ STEP 1: Found ${platform} via direct search: ${foundUrl}`);
+      }
+    }
+    
+    console.log(`✅ STEP 1 Complete: Found ${directSearchSuccessCount}/${directSearchPlatforms.length} profiles via direct search`);
+    
+    // STEP 2: WEBSITE DISCOVERY - Find company website
+    console.log('🌐 STEP 2: Finding company website...');
     const isUrl = /\.(com|io|net|org|co|ai|dev|app|tech)\b/i.test(company);
     
     let website: string;
@@ -1360,18 +1567,98 @@ export default async function handler(
     }
 
     if (!website) {
-      result.status = 'Failed: Could not find website';
+      // If we found some profiles via direct search, still return success
+      if (directSearchSuccessCount > 0) {
+        console.log('⚠️ Website not found, but returning direct search results');
+        return res.status(200).json(result);
+      }
       return res.status(200).json(result);
     }
 
     result.website = website;
-    console.log(`✅ Website found: ${website}`);
+    
+    // Extract domain from website
+    try {
+      const urlObj = new URL(website);
+      result.company_domain = urlObj.hostname.replace('www.', '');
+    } catch {
+      result.company_domain = '';
+    }
+    console.log(`✅ STEP 2 Complete: Website found: ${website}`);
 
-    // Use comprehensive multi-step extraction
-    console.log('🔍 Starting comprehensive extraction...');
+    // FAST MODE: Skip heavy extraction for bulk processing
+    if (fast_mode) {
+      console.log('⚡ FAST MODE: Quick extraction from homepage only');
+      
+      const homeHtml = await fetchPageContent(website);
+      if (homeHtml) {
+        // Extract actual company name from website content
+        const extractedName = extractCompanyName(homeHtml, result.company_domain);
+        if (extractedName && extractedName !== cleanCompanyName) {
+          result.company_name = extractedName;
+          console.log(`📝 Extracted company name from website: "${extractedName}"`);
+        }
+        
+        // Quick contact page detection from homepage links (only if requested)
+        if (fields_to_extract.length === 0 || fields_to_extract.includes('contact_page')) {
+          const $ = cheerio.load(homeHtml);
+          const contactKeywords = ['contact', 'contact-us', 'contactus', 'get-in-touch', 'reach-us', 'connect'];
+          
+          $('a[href]').each((_, element) => {
+            if (result.contact_page !== 'Not found') return;
+            
+            const href = $(element).attr('href');
+            const linkText = $(element).text().toLowerCase().trim();
+            
+            if (href && contactKeywords.some(kw => linkText.includes(kw) || href.toLowerCase().includes(kw))) {
+              let contactUrl = href;
+              if (href.startsWith('/')) {
+                contactUrl = new URL(href, website).toString();
+              } else if (!href.startsWith('http')) {
+                try {
+                  contactUrl = new URL(href, website).toString();
+                } catch {
+                  return;
+                }
+              }
+              
+              // Verify it's same domain
+              try {
+                const linkDomain = new URL(contactUrl).hostname;
+                const siteDomain = new URL(website).hostname;
+                if (linkDomain === siteDomain) {
+                  result.contact_page = contactUrl;
+                  console.log(`⚡ FAST MODE: Found contact page: ${contactUrl}`);
+                }
+              } catch {
+                // Invalid URL, skip
+              }
+            }
+          });
+        }
+        
+        // Quick email/phone extraction from homepage (only if requested)
+        if (fields_to_extract.length === 0 || fields_to_extract.includes('email') || fields_to_extract.includes('phone')) {
+          const contactInfo = extractEmailAndPhone(homeHtml);
+          if ((fields_to_extract.length === 0 || fields_to_extract.includes('email')) && contactInfo.email !== 'Not found') {
+            result.email = contactInfo.email;
+            console.log(`⚡ FAST MODE: Found email: ${contactInfo.email}`);
+          }
+          if ((fields_to_extract.length === 0 || fields_to_extract.includes('phone')) && contactInfo.phone !== 'Not found') {
+            result.phone = contactInfo.phone;
+            console.log(`⚡ FAST MODE: Found phone: ${contactInfo.phone}`);
+          }
+        }
+      }
+      
+      return res.status(200).json(result);
+    }
+
+    // STEP 3: COMPREHENSIVE EXTRACTION - Crawl website for missing data
+    console.log('🔍 STEP 3: Starting comprehensive website extraction...');
     const extracted = await comprehensiveExtraction(website);
     
-    // Apply extracted data to result
+    // Apply extracted data to result (only if not already found in Step 1)
     if (extracted.contactPage !== 'Not found') {
       result.contact_page = extracted.contactPage;
     }
@@ -1384,71 +1671,30 @@ export default async function handler(
       result.phone = extracted.contactInfo.phone;
     }
     
-    // Apply social links from comprehensive extraction
-    console.log('📊 Extracted social links:', JSON.stringify(extracted.socialLinks));
-    console.log('📊 Current result before applying:', {
-      linkedin: result.linkedin,
-      facebook: result.facebook,
-      twitter: result.twitter,
-      instagram: result.instagram
-    });
+    // Apply social links from comprehensive extraction (merge with Step 1 results)
+    console.log('📊 Merging extracted social links with direct search results...');
     
     for (const [platform, url] of Object.entries(extracted.socialLinks)) {
-      console.log(`🔍 Checking platform: ${platform}, url: ${url}`);
-      if (url && url !== 'Not found') {
+      // Only use extracted link if we didn't find it in Step 1 (direct search)
+      if (url && url !== 'Not found' && result[platform as keyof EnrichResult] === 'Not found') {
         result[platform as keyof EnrichResult] = url as any;
-        console.log(`✅ Applied ${platform}: ${url}`);
-      } else {
-        console.log(`❌ Skipped ${platform}: ${url}`);
+        console.log(`✅ STEP 3: Found ${platform} via website extraction: ${url}`);
       }
     }
     
-    console.log('📊 Result after applying:', {
-      linkedin: result.linkedin,
-      facebook: result.facebook,
-      twitter: result.twitter,
-      instagram: result.instagram
-    });
+    // Keywords extraction removed - not needed
     
-    // Extract keywords from homepage
-    const homeHtml = await fetchPageContent(website);
-    if (homeHtml) {
-      const extractedKeywords = extractKeywords(homeHtml);
-      
-      // Handle keywords based on method
-      if (method === 'hybrid' && result.keywords && result.keywords.length > 0) {
-        // Hybrid: Combine AI-generated and extracted keywords, remove duplicates
-        const aiKeywords = result.keywords;
-        const combined = [...aiKeywords, ...extractedKeywords];
-        result.keywords = Array.from(new Set(combined)).slice(0, 20); // Keep unique, max 20
-      } else {
-        // Extraction method: Use extracted keywords only
-        result.keywords = extractedKeywords;
-      }
-    }
-
-    // Search for missing platforms with expanded list
-    // Skip Facebook and Instagram as they return false positives (200 for non-existent pages)
-    const missingPlatforms = ['linkedin', 'twitter', 'youtube', 'tiktok', 'github', 'pinterest'];
-    for (const platform of missingPlatforms) {
-      if (result[platform as keyof EnrichResult] === 'Not found') {
-        const foundUrl = await searchSocialProfile(company, platform, website);
-        if (foundUrl) {
-          result[platform as keyof EnrichResult] = foundUrl as any;
-          console.log(`Found ${platform} via direct search: ${foundUrl}`);
-        }
-      }
-    }
+    console.log('✅ STEP 3 Complete: Website extraction finished');
     
-    // FALLBACK: Use search engine to find missing data
-    console.log('🔍 Using search engine fallback for missing data...');
+    // STEP 4: SEARCH ENGINE FALLBACK - Find any remaining missing data
+    console.log('🔍 STEP 4: Using search engine fallback for missing data...');
     
     // Try to find contact page if still missing
     if (result.contact_page === 'Not found') {
       const contactUrl = await searchEngineFind(website, 'contact');
       if (contactUrl) {
         result.contact_page = contactUrl;
-        console.log(`✅ Found contact page via search: ${contactUrl}`);
+        console.log(`✅ STEP 4: Found contact page via search engine: ${contactUrl}`);
       }
     }
     
@@ -1459,19 +1705,14 @@ export default async function handler(
         const foundUrl = await searchEngineFind(website, platform);
         if (foundUrl) {
           result[platform as keyof EnrichResult] = foundUrl as any;
-          console.log(`✅ Found ${platform} via search engine: ${foundUrl}`);
+          console.log(`✅ STEP 4: Found ${platform} via search engine: ${foundUrl}`);
         }
       }
     }
+    
+    console.log('✅ STEP 4 Complete: Search engine fallback finished');
 
-    // Set status based on method used
-    if (method === 'hybrid') {
-      result.status = 'Success (Hybrid: AI + Extraction)';
-    } else if (method === 'ai') {
-      result.status = 'Success (AI-powered with extraction fallback)';
-    } else {
-      result.status = 'Success';
-    }
+    // Processing complete
     
     console.log('🎯 FINAL RESULT BEING RETURNED:', JSON.stringify({
       company: result.company_name,
@@ -1481,15 +1722,13 @@ export default async function handler(
       instagram: result.instagram,
       youtube: result.youtube,
       tiktok: result.tiktok,
-      github: result.github,
-      pinterest: result.pinterest,
-      discord: result.discord
+      pinterest: result.pinterest
     }));
     
     return res.status(200).json(result);
 
   } catch (error) {
-    result.status = `Error: ${error instanceof Error ? error.message : 'Unknown error'}`;
+    console.error('Error during enrichment:', error);
     return res.status(200).json(result);
   }
 }
