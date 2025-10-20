@@ -344,6 +344,7 @@ export default function Home() {
       setResult({
         company_name: companyInput,
         website: '',
+        company_domain: '',
         contact_page: 'Not found',
         email: 'Not found',
         phone: 'Not found',
@@ -354,9 +355,6 @@ export default function Home() {
         youtube: 'Not found',
         tiktok: 'Not found',
         pinterest: 'Not found',
-        github: 'Not found',
-        discord: 'Not found',
-        status: 'Error: Failed to fetch',
       });
     } finally {
       setLoading(false);
