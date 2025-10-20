@@ -1361,29 +1361,6 @@ export default function Home() {
                       })}
                     </div>
                   </div>
-
-                  {/* Keywords Section */}
-                  {result.keywords && result.keywords.length > 0 && (
-                    <div className="mt-4 p-4 bg-gradient-to-r from-purple-50 to-blue-50 rounded-lg border border-purple-200">
-                      <h3 className="font-semibold mb-3 flex items-center gap-2 text-purple-700">
-                        <TrendingUp className="w-5 h-5" />
-                        Website Keywords ({result.keywords.length})
-                      </h3>
-                      <div className="flex flex-wrap gap-2">
-                        {result.keywords.map((keyword, index) => (
-                          <span
-                            key={index}
-                            className="px-3 py-1 bg-white border border-purple-300 text-purple-700 rounded-full text-xs font-medium shadow-sm hover:shadow-md transition-shadow"
-                          >
-                            {keyword}
-                          </span>
-                        ))}
-                      </div>
-                      <p className="text-xs text-gray-600 mt-3">
-                        💡 These keywords represent the most frequent terms found on the website
-                      </p>
-                    </div>
-                  )}
                 </div>
               )}
             </div>
