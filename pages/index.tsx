@@ -511,10 +511,6 @@ export default function Home() {
         <div className="container mx-auto px-4 py-8 max-w-6xl">
           {/* Header with Dark Mode Toggle and Stats */}
           <div className="flex justify-between items-start mb-8">
-
-        <div className="container mx-auto px-4 py-8 max-w-6xl">
-          {/* Header with Dark Mode Toggle and Stats */}
-          <div className="flex justify-between items-start mb-8">
             <div className="flex-1 text-center">
               <h1 className={`text-4xl font-bold mb-2 ${darkMode ? 'text-blue-400' : 'text-primary'}`}>
                 🔍 Company Data Extractor
