@@ -404,13 +404,7 @@ export default function Home() {
           
           const response = await axios.post<EnrichResult>('/api/enrich', {
             company: company,
-            method: method,
-            aiProvider: aiProvider,
-            apiKey: apiKey || undefined,
-            geminiApiKey: geminiApiKey || undefined,
-            customPrompt: customPrompt || undefined,
             platforms: selectedPlatforms,
-            model: selectedModel,
             fast_mode: true, // Enable fast mode for bulk processing
             fields_to_extract: fieldsToExtract, // Only extract selected fields
           }, {
