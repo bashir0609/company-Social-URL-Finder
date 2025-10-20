@@ -101,7 +101,41 @@ export default function Home() {
     }
   }, [darkMode]);
 
-  // AI-related hooks removed - pure web scraping only
+  // Check environment variables on load and auto-fetch models
+  useEffect(() => {
+    const checkEnvVars = async () => {
+      try {
+        const response = await axios.get('/api/check-env');
+        setHasEnvKeys({
+          openrouter: response.data.hasOpenRouterKey,
+          gemini: response.data.hasGeminiKey
+        });
+        
+        // Auto-fetch models if OpenRouter key is available in env
+        if (response.data.hasOpenRouterKey && aiProvider === 'openrouter') {
+          console.log('OpenRouter key found in environment, fetching models...');
+          await fetchModels();
+        }
+      } catch (error) {
+        console.error('Failed to check environment variables:', error);
+      }
+    };
+    checkEnvVars();
+  }, []);
+
+  // Auto-fetch models when API key is entered or AI provider changes
+  useEffect(() => {
+    const shouldFetchModels = 
+      aiProvider === 'openrouter' && 
+      (method === 'ai' || method === 'hybrid') &&
+      (apiKey || hasEnvKeys.openrouter) &&
+      availableModels.length === 0;
+    
+    if (shouldFetchModels) {
+      console.log('API key detected, auto-fetching models...');
+      fetchModels();
+    }
+  }, [apiKey, aiProvider, method, hasEnvKeys.openrouter]);
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -139,7 +173,34 @@ export default function Home() {
     localStorage.setItem('recentSearches', JSON.stringify(updated));
   };
 
-  // fetchModels removed - no AI functionality
+  // Fetch available models from OpenRouter
+  const fetchModels = async () => {
+    setLoadingModels(true);
+    setErrorMessage('');
+    
+    try {
+      // Pass apiKey if available, otherwise backend will use env variable
+      const url = apiKey 
+        ? `/api/models?apiKey=${encodeURIComponent(apiKey)}`
+        : '/api/models';
+      
+      const response = await axios.get(url);
+      const models = response.data.models;
+      setAvailableModels(models);
+      
+      // Set first free model as default, or first model if no free models
+      if (models.length > 0) {
+        const firstFreeModel = models.find((m: any) => m.isFree);
+        setSelectedModel(firstFreeModel ? firstFreeModel.id : models[0].id);
+      }
+    } catch (error: any) {
+      console.error('Error fetching models:', error);
+      const errorMsg = error.response?.data?.error || error.message;
+      setErrorMessage(`❌ Failed to fetch models: ${errorMsg}`);
+    } finally {
+      setLoadingModels(false);
+    }
+  };
 
   // Copy to clipboard
   const copyToClipboard = async (text: string) => {
@@ -181,6 +242,29 @@ export default function Home() {
   const handleSingleSearch = async () => {
     if (!companyInput.trim()) return;
 
+    // Validate AI method requirements
+    if (method === 'ai' || method === 'hybrid') {
+      if (aiProvider === 'openrouter') {
+        if (!apiKey && !hasEnvKeys.openrouter) {
+          setErrorMessage('🔑 AI method requires an OpenRouter API key. Please enter your API key above or set it in environment variables.');
+          return;
+        }
+        if (availableModels.length === 0) {
+          setErrorMessage('⚠️ Please fetch AI models first by clicking the "Fetch Models" button.');
+          return;
+        }
+        if (!selectedModel) {
+          setErrorMessage('⚠️ Please select an AI model from the dropdown.');
+          return;
+        }
+      } else if (aiProvider === 'gemini') {
+        if (!geminiApiKey && !hasEnvKeys.gemini) {
+          setErrorMessage('🔑 AI method requires a Google Gemini API key. Please enter your API key above or set it in environment variables.');
+          return;
+        }
+      }
+    }
+
     setLoading(true);
     setResult(null);
     setErrorMessage('');
@@ -193,11 +277,27 @@ export default function Home() {
     incrementSearchCount();
 
     try {
-      // Show progress messages for web scraping
-      setTimeout(() => setSearchProgress('🚀 Step 1: Trying direct profile URLs...'), 500);
-      setTimeout(() => setSearchProgress('🌐 Step 2: Finding company website...'), 2000);
-      setTimeout(() => setSearchProgress('📋 Step 3: Extracting data from website...'), 4000);
-      setTimeout(() => setSearchProgress('✅ Processing results...'), 6000);
+      // Show progress messages based on method
+      if (method === 'ai') {
+        setTimeout(() => setSearchProgress('🤖 AI analyzing company...'), 500);
+        setTimeout(() => setSearchProgress('🔍 Searching social profiles...'), 1500);
+        setTimeout(() => setSearchProgress('✅ Processing results...'), 2500);
+      } else if (method === 'extraction') {
+        setTimeout(() => setSearchProgress('🚀 Step 1: Trying direct profile URLs...'), 500);
+        setTimeout(() => setSearchProgress('🌐 Step 2: Finding company website...'), 2000);
+        setTimeout(() => setSearchProgress('📋 Step 3: Crawling website menu links...'), 4000);
+        setTimeout(() => setSearchProgress('🔍 Step 3: Scraping contact, about pages...'), 6000);
+        setTimeout(() => setSearchProgress('🔗 Step 3: Extracting social links and contact info...'), 8000);
+        setTimeout(() => setSearchProgress('🔎 Step 4: Search engine fallback for missing data...'), 10000);
+        setTimeout(() => setSearchProgress('📊 Finalizing keywords and data...'), 12000);
+        setTimeout(() => setSearchProgress('✅ Processing results...'), 14000);
+      } else {
+        setTimeout(() => setSearchProgress('🤖 AI analyzing company...'), 500);
+        setTimeout(() => setSearchProgress('🚀 Step 1: Trying direct profile URLs...'), 1500);
+        setTimeout(() => setSearchProgress('🌐 Step 2: Finding website...'), 3000);
+        setTimeout(() => setSearchProgress('📋 Step 3: Crawling and extracting...'), 5000);
+        setTimeout(() => setSearchProgress('✅ Processing results...'), 7000);
+      }
 
       const response = await axios.post<EnrichResult>('/api/enrich', {
         company: companyInput,
@@ -311,6 +411,29 @@ export default function Home() {
     const controller = new AbortController();
     abortControllerRef.current = controller;
 
+    // Validate AI method requirements for bulk processing
+    if (method === 'ai' || method === 'hybrid') {
+      if (aiProvider === 'openrouter') {
+        if (!apiKey && !hasEnvKeys.openrouter) {
+          setErrorMessage('🔑 AI method requires an OpenRouter API key. Please enter your API key above or set it in environment variables.');
+          return;
+        }
+        if (availableModels.length === 0) {
+          setErrorMessage('⚠️ Please fetch AI models first by clicking the "Fetch Models" button.');
+          return;
+        }
+        if (!selectedModel) {
+          setErrorMessage('⚠️ Please select an AI model from the dropdown.');
+          return;
+        }
+      } else if (aiProvider === 'gemini') {
+        if (!geminiApiKey && !hasEnvKeys.gemini) {
+          setErrorMessage('🔑 AI method requires a Google Gemini API key. Please enter your API key above or set it in environment variables.');
+          return;
+        }
+      }
+    }
+
     const fileExtension = bulkFile.name.split('.').pop()?.toLowerCase();
     let companies: string[] = [];
 
@@ -404,7 +527,13 @@ export default function Home() {
           
           const response = await axios.post<EnrichResult>('/api/enrich', {
             company: company,
+            method: method,
+            aiProvider: aiProvider,
+            apiKey: apiKey || undefined,
+            geminiApiKey: geminiApiKey || undefined,
+            customPrompt: customPrompt || undefined,
             platforms: selectedPlatforms,
+            model: selectedModel,
             fast_mode: true, // Enable fast mode for bulk processing
             fields_to_extract: fieldsToExtract, // Only extract selected fields
           }, {
