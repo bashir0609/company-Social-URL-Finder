@@ -1452,6 +1452,34 @@ export default async function handler(
   };
 
   try {
+    // If input is a URL, extract company name for searching
+    let searchName = company;
+    const isInputUrl = company.includes('.') && (company.startsWith('http') || company.startsWith('www') || company.match(/^[a-zA-Z0-9-]+\.[a-zA-Z]{2,}/));
+    
+    if (isInputUrl) {
+      try {
+        let urlToProcess = company;
+        if (!company.startsWith('http')) {
+          urlToProcess = 'https://' + company;
+        }
+        const urlObj = new URL(urlToProcess);
+        const domain = urlObj.hostname.replace('www.', '');
+        const domainParts = domain.split('.');
+        const mainPart = domainParts[0];
+        
+        // Use clean name for searching (e.g., "gitarrenrichter" instead of "gitarrenrichter.de")
+        searchName = mainPart
+          .replace(/[-_]/g, ' ')
+          .split(' ')
+          .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+          .join(' ');
+        
+        console.log(`Input is URL, using "${searchName}" for social profile searches`);
+      } catch (error) {
+        console.log('Could not parse URL, using original input');
+      }
+    }
+    
     // AI METHOD or HYBRID: Use AI provider (OpenRouter or Gemini) for intelligent search
     if (method === 'ai' || method === 'hybrid') {
       let aiResults: Partial<EnrichResult> = {};
@@ -1545,7 +1573,7 @@ export default async function handler(
     let directSearchSuccessCount = 0;
     
     for (const platform of directSearchPlatforms) {
-      const foundUrl = await searchSocialProfile(company, platform, '');
+      const foundUrl = await searchSocialProfile(searchName, platform, '');
       if (foundUrl) {
         result[platform as keyof EnrichResult] = foundUrl as any;
         directSearchSuccessCount++;
