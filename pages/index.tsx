@@ -525,8 +525,15 @@ export default function Home() {
   };
 
   const downloadResults = () => {
-    // Define consistent column order for all exports
-    const columnOrder = ['company_name', 'website', 'company_domain', 'contact_page', 'email', 'phone', 'linkedin', 'facebook', 'twitter', 'instagram', 'youtube', 'tiktok', 'pinterest'];
+    // Get original columns from uploaded file (if any)
+    const originalColumns = originalBulkData.length > 0 ? Object.keys(originalBulkData[0]) : [];
+    // Define scraped columns
+    const scrapedColumns = ['company_name', 'website', 'company_domain', 'contact_page', 'email', 'phone', 'linkedin', 'facebook', 'twitter', 'instagram', 'youtube', 'tiktok', 'pinterest'];
+    // Filter out scraped columns that already exist in original columns to avoid duplicates
+    const uniqueScrapedColumns = scrapedColumns.filter(col => !originalColumns.includes(col));
+    // Combine: original columns first, then unique scraped columns
+    const columnOrder = [...originalColumns, ...uniqueScrapedColumns];
+    
     const worksheet = XLSX.utils.json_to_sheet(bulkResults, { header: columnOrder });
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, 'Results');
@@ -552,8 +559,15 @@ export default function Home() {
              result.website;
     });
 
-    // Define consistent column order for all exports
-    const columnOrder = ['company_name', 'website', 'company_domain', 'contact_page', 'email', 'phone', 'linkedin', 'facebook', 'twitter', 'instagram', 'youtube', 'tiktok', 'pinterest'];
+    // Get original columns from uploaded file (if any)
+    const originalColumns = originalBulkData.length > 0 ? Object.keys(originalBulkData[0]) : [];
+    // Define scraped columns
+    const scrapedColumns = ['company_name', 'website', 'company_domain', 'contact_page', 'email', 'phone', 'linkedin', 'facebook', 'twitter', 'instagram', 'youtube', 'tiktok', 'pinterest'];
+    // Filter out scraped columns that already exist in original columns to avoid duplicates
+    const uniqueScrapedColumns = scrapedColumns.filter(col => !originalColumns.includes(col));
+    // Combine: original columns first, then unique scraped columns
+    const columnOrder = [...originalColumns, ...uniqueScrapedColumns];
+    
     const worksheet = XLSX.utils.json_to_sheet(successResults, { header: columnOrder });
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, 'Success');
@@ -578,8 +592,15 @@ export default function Home() {
              !result.website;
     });
 
-    // Define consistent column order for all exports
-    const columnOrder = ['company_name', 'website', 'company_domain', 'contact_page', 'email', 'phone', 'linkedin', 'facebook', 'twitter', 'instagram', 'youtube', 'tiktok', 'pinterest'];
+    // Get original columns from uploaded file (if any)
+    const originalColumns = originalBulkData.length > 0 ? Object.keys(originalBulkData[0]) : [];
+    // Define scraped columns
+    const scrapedColumns = ['company_name', 'website', 'company_domain', 'contact_page', 'email', 'phone', 'linkedin', 'facebook', 'twitter', 'instagram', 'youtube', 'tiktok', 'pinterest'];
+    // Filter out scraped columns that already exist in original columns to avoid duplicates
+    const uniqueScrapedColumns = scrapedColumns.filter(col => !originalColumns.includes(col));
+    // Combine: original columns first, then unique scraped columns
+    const columnOrder = [...originalColumns, ...uniqueScrapedColumns];
+    
     const worksheet = XLSX.utils.json_to_sheet(failedResults, { header: columnOrder });
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, 'Failed');
