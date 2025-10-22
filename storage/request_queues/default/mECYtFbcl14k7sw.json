@@ -1,0 +1,9 @@
+{
+	"id": "mECYtFbcl14k7sw",
+	"json": "{\"id\":\"mECYtFbcl14k7sw\",\"url\":\"https://www.runtastic.com/\",\"loadedUrl\":\"https://www.runtastic.com/\",\"uniqueKey\":\"https://www.runtastic.com\",\"method\":\"GET\",\"noRetry\":false,\"retryCount\":0,\"errorMessages\":[],\"headers\":{},\"userData\":{\"__crawlee\":{\"state\":4}},\"handledAt\":\"2025-10-22T11:09:54.606Z\"}",
+	"method": "GET",
+	"orderNo": null,
+	"retryCount": 0,
+	"uniqueKey": "https://www.runtastic.com",
+	"url": "https://www.runtastic.com/"
+}

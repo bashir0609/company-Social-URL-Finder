@@ -1,0 +1,9 @@
+{
+	"id": "WYW0rQCBIx3Oilg",
+	"json": "{\"id\":\"WYW0rQCBIx3Oilg\",\"url\":\"http://automotcentre.com\",\"loadedUrl\":\"https://www.automotcentre.com/automotcentre.com/\",\"uniqueKey\":\"http://automotcentre.com\",\"method\":\"GET\",\"noRetry\":false,\"retryCount\":0,\"errorMessages\":[],\"headers\":{},\"userData\":{\"__crawlee\":{\"state\":4}},\"handledAt\":\"2025-10-22T11:08:38.540Z\"}",
+	"method": "GET",
+	"orderNo": null,
+	"retryCount": 0,
+	"uniqueKey": "http://automotcentre.com",
+	"url": "http://automotcentre.com"
+}

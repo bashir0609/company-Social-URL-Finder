@@ -29,6 +29,7 @@ interface EnrichResult {
 export default function Home() {
   const [activeTab, setActiveTab] = useState<'single' | 'bulk'>('single');
   const [companyInput, setCompanyInput] = useState('');
+  const [companyDomain, setCompanyDomain] = useState('');
   const [showSidebar, setShowSidebar] = useState(false);
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<EnrichResult | null>(null);
@@ -37,6 +38,7 @@ export default function Home() {
   const [bulkProgress, setBulkProgress] = useState(0);
   const [copiedUrl, setCopiedUrl] = useState<string | null>(null);
   const [recentSearches, setRecentSearches] = useState<string[]>([]);
+  const [originalBulkData, setOriginalBulkData] = useState<any[]>([]);
   const [showRecentSearches, setShowRecentSearches] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string>('');
   const [darkMode, setDarkMode] = useState(false);
@@ -63,6 +65,8 @@ export default function Home() {
     'linkedin', 'facebook', 'twitter', 'instagram', 'youtube', 'tiktok', 'pinterest'
   ]);
   const [showFieldSelector, setShowFieldSelector] = useState(false);
+  const [searchEngine, setSearchEngine] = useState<string>('google');
+  const [socialSearchMethod, setSocialSearchMethod] = useState<string>('website');
 
   // Load recent searches, dark mode, and visitor stats from localStorage
   useEffect(() => {
@@ -116,7 +120,7 @@ export default function Home() {
       // Ctrl+Enter or Cmd+Enter - Submit search
       if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
         e.preventDefault();
-        if (activeTab === 'single' && companyInput.trim()) {
+        if (activeTab === 'single' && (companyInput.trim() || companyDomain.trim())) {
           handleSingleSearch();
         }
       }
@@ -125,12 +129,14 @@ export default function Home() {
       if (e.key === 'Escape') {
         setResult(null);
         setErrorMessage('');
+        setCompanyInput('');
+        setCompanyDomain('');
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [activeTab, companyInput]);
+  }, [activeTab, companyInput, companyDomain]);
 
   // Save to recent searches
   const addToRecentSearches = (company: string) => {
@@ -158,7 +164,12 @@ export default function Home() {
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const link = document.createElement('a');
     link.href = URL.createObjectURL(blob);
-    link.download = `social-urls-${new Date().toISOString().split('T')[0]}.csv`;
+    
+    // Generate filename: date + original filename + social finder
+    const date = new Date().toISOString().split('T')[0];
+    const originalName = bulkFile ? bulkFile.name.replace(/\.[^/.]+$/, '') : 'export';
+    link.download = `${date} ${originalName} social finder.csv`;
+    
     link.click();
   };
 
@@ -179,15 +190,18 @@ export default function Home() {
   };
 
   const handleSingleSearch = async () => {
-    if (!companyInput.trim()) return;
+    if (!companyInput.trim() && !companyDomain.trim()) return;
 
     setLoading(true);
     setResult(null);
     setErrorMessage('');
     setSearchProgress('🔍 Finding website...');
 
+    // Use domain if provided, otherwise use company name
+    const searchInput = companyDomain.trim() || companyInput.trim();
+
     // Add to recent searches
-    addToRecentSearches(companyInput);
+    addToRecentSearches(searchInput);
     
     // Increment search count
     incrementSearchCount();
@@ -200,8 +214,10 @@ export default function Home() {
       setTimeout(() => setSearchProgress('✅ Processing results...'), 6000);
 
       const response = await axios.post<EnrichResult>('/api/enrich', {
-        company: companyInput,
+        company: searchInput,
         platforms: selectedPlatforms,
+        search_engine: searchEngine,
+        social_search_method: socialSearchMethod,
       });
       setResult(response.data);
       setSearchProgress('');
@@ -324,6 +340,9 @@ export default function Home() {
           console.log('Data rows:', data.length);
           console.log('First row:', data[0]);
           
+          // Store original data
+          setOriginalBulkData(data);
+          
           // Use selected column or try to find company column
           const companyCol = selectedColumn || Object.keys(data[0] || {}).find(key => 
             key.toLowerCase().includes('company') || 
@@ -336,7 +355,7 @@ export default function Home() {
           if (companyCol) {
             companies = data.map(row => row[companyCol]).filter(Boolean);
             console.log('Companies to process:', companies);
-            await processBulkCompanies(companies);
+            await processBulkCompanies(companies, data);
           } else {
             console.error('No valid column found');
             setErrorMessage('❌ Please select a column containing company names or domains.');
@@ -355,6 +374,9 @@ export default function Home() {
         const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
         const jsonData = XLSX.utils.sheet_to_json(firstSheet) as any[];
         
+        // Store original data
+        setOriginalBulkData(jsonData);
+        
         // Use selected column or try to find company column
         const companyCol = selectedColumn || Object.keys(jsonData[0] || {}).find(key => 
           key.toLowerCase().includes('company') || 
@@ -364,7 +386,7 @@ export default function Home() {
         
         if (companyCol) {
           companies = jsonData.map(row => row[companyCol]).filter(Boolean);
-          await processBulkCompanies(companies);
+          await processBulkCompanies(companies, jsonData);
         } else {
           setErrorMessage('❌ Please select a column containing company names or domains.');
         }
@@ -373,7 +395,7 @@ export default function Home() {
     }
   };
 
-  const processBulkCompanies = async (companies: string[]) => {
+  const processBulkCompanies = async (companies: string[], originalData: any[]) => {
     const results: EnrichResult[] = new Array(companies.length);
     const BATCH_SIZE = 5; // Process 5 companies in parallel
     let completedCount = 0;
@@ -405,8 +427,9 @@ export default function Home() {
           const response = await axios.post<EnrichResult>('/api/enrich', {
             company: company,
             platforms: selectedPlatforms,
-            fast_mode: true, // Enable fast mode for bulk processing
             fields_to_extract: fieldsToExtract, // Only extract selected fields
+            search_engine: searchEngine,
+            social_search_method: socialSearchMethod,
           }, {
             signal: abortControllerRef.current?.signal, // Pass abort signal to axios
           });
@@ -475,8 +498,18 @@ export default function Home() {
       completedCount += batch.length;
       setBulkProgress((completedCount / companies.length) * 100);
       
+      // Merge scraped results with original data
+      const mergedResults = results.map((scrapedData, index) => {
+        if (!scrapedData) return undefined;
+        // Combine original row data with scraped data
+        return {
+          ...originalData[index], // Original uploaded data
+          ...scrapedData,         // Scraped data (will override if column names match)
+        };
+      }).filter(r => r !== undefined);
+      
       // Update results display
-      setBulkResults(results.filter(r => r !== undefined));
+      setBulkResults(mergedResults);
       
       setBulkProgressLog(prev => [...prev, `✅ Batch complete: ${completedCount}/${companies.length} processed`]);
       
@@ -495,7 +528,13 @@ export default function Home() {
     const worksheet = XLSX.utils.json_to_sheet(bulkResults);
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, 'Results');
-    XLSX.writeFile(workbook, 'company-social-urls.xlsx');
+    
+    // Generate filename: date + original filename + social finder
+    const date = new Date().toISOString().split('T')[0];
+    const originalName = bulkFile ? bulkFile.name.replace(/\.[^/.]+$/, '') : 'export';
+    const filename = `${date} ${originalName} social finder.xlsx`;
+    
+    XLSX.writeFile(workbook, filename);
   };
 
   return (
@@ -601,33 +640,118 @@ export default function Home() {
                   </button>
                   {showRecentSearches && (
                     <div className="mt-2 flex flex-wrap gap-2">
-                      {recentSearches.map((search, index) => (
-                        <button
-                          key={index}
-                          onClick={() => setCompanyInput(search)}
-                          className="px-3 py-1 bg-gray-100 hover:bg-gray-200 rounded-full text-sm text-gray-700"
-                        >
-                          {search}
-                        </button>
-                      ))}
+                      {recentSearches.map((search, index) => {
+                        // Check if search looks like a domain/URL
+                        const isDomain = search.includes('.') && (
+                          search.startsWith('http') || 
+                          search.startsWith('www') || 
+                          /^[a-zA-Z0-9-]+\.[a-zA-Z]{2,}/.test(search)
+                        );
+                        
+                        return (
+                          <button
+                            key={index}
+                            onClick={() => {
+                              if (isDomain) {
+                                setCompanyDomain(search);
+                                setCompanyInput('');
+                              } else {
+                                setCompanyInput(search);
+                                setCompanyDomain('');
+                              }
+                            }}
+                            className="px-3 py-1 bg-gray-100 hover:bg-gray-200 rounded-full text-sm text-gray-700"
+                            title={isDomain ? 'Domain' : 'Company Name'}
+                          >
+                            {search}
+                          </button>
+                        );
+                      })}
                     </div>
                   )}
                 </div>
               )}
 
+              {/* Two separate input boxes */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Company Name
+                  </label>
+                  <input
+                    type="text"
+                    value={companyInput}
+                    onChange={(e) => setCompanyInput(e.target.value)}
+                    onKeyPress={(e) => e.key === 'Enter' && handleSingleSearch()}
+                    onFocus={() => setShowRecentSearches(true)}
+                    placeholder="e.g., Microsoft, Nike, Google"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+                  />
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Company Domain (Optional)
+                  </label>
+                  <input
+                    type="text"
+                    value={companyDomain}
+                    onChange={(e) => setCompanyDomain(e.target.value)}
+                    onKeyPress={(e) => e.key === 'Enter' && handleSingleSearch()}
+                    placeholder="e.g., microsoft.com, 83dbaudio.cn"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+                  />
+                </div>
+              </div>
+              
+              <p className="text-xs text-gray-500 mb-4">
+                💡 <strong>Tip:</strong> Provide domain for faster, more accurate results. If only name is provided, we'll search for the website.
+              </p>
+
+              {/* Search Method Options */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4 p-4 bg-gray-50 rounded-lg">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    🔍 Search Engine for Website
+                  </label>
+                  <select
+                    value={searchEngine}
+                    onChange={(e) => setSearchEngine(e.target.value)}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+                  >
+                    <option value="google">Google Search</option>
+                    <option value="bing">Bing Search</option>
+                    <option value="duckduckgo">DuckDuckGo</option>
+                    <option value="direct">Direct URL Only (No Search)</option>
+                  </select>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Used to find company website when only name is provided
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    📱 Social Profile Search Method
+                  </label>
+                  <select
+                    value={socialSearchMethod}
+                    onChange={(e) => setSocialSearchMethod(e.target.value)}
+                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
+                  >
+                    <option value="website">Website Scraping (Recommended)</option>
+                    <option value="search">Search Engine Lookup</option>
+                    <option value="both">Both Methods (Most Thorough)</option>
+                  </select>
+                  <p className="text-xs text-gray-500 mt-1">
+                    How to find social media profiles
+                  </p>
+                </div>
+              </div>
+
               <div className="flex gap-4 mb-6">
-                <input
-                  type="text"
-                  value={companyInput}
-                  onChange={(e) => setCompanyInput(e.target.value)}
-                  onKeyPress={(e) => e.key === 'Enter' && handleSingleSearch()}
-                  onFocus={() => setShowRecentSearches(true)}
-                  placeholder="Enter company name or website URL (e.g., Microsoft or microsoft.com)"
-                  className="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary focus:border-transparent"
-                />
                 <button
                   onClick={handleSingleSearch}
-                  disabled={loading || !companyInput.trim()}
+                  disabled={loading || (!companyInput.trim() && !companyDomain.trim())}
                   className="px-6 py-3 bg-primary text-white rounded-lg font-medium hover:bg-blue-600 disabled:bg-gray-300 disabled:cursor-not-allowed flex items-center gap-2"
                 >
                   {loading ? (

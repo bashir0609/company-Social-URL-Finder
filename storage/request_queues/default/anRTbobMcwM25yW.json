@@ -1,0 +1,9 @@
+{
+	"id": "anRTbobMcwM25yW",
+	"json": "{\"id\":\"anRTbobMcwM25yW\",\"url\":\"https://www.selectivesearch.com/\",\"loadedUrl\":\"https://www.selectivesearch.com/\",\"uniqueKey\":\"https://www.selectivesearch.com\",\"method\":\"GET\",\"noRetry\":false,\"retryCount\":0,\"errorMessages\":[],\"headers\":{},\"userData\":{\"__crawlee\":{\"state\":4}},\"handledAt\":\"2025-10-22T11:12:10.429Z\"}",
+	"method": "GET",
+	"orderNo": null,
+	"retryCount": 0,
+	"uniqueKey": "https://www.selectivesearch.com",
+	"url": "https://www.selectivesearch.com/"
+}

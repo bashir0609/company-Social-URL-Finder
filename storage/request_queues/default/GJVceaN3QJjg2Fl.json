@@ -1,0 +1,9 @@
+{
+	"id": "GJVceaN3QJjg2Fl",
+	"json": "{\"id\":\"GJVceaN3QJjg2Fl\",\"url\":\"https://www.google.com/?gws_rd=ssl\",\"loadedUrl\":\"https://www.google.com/?gws_rd=ssl\",\"uniqueKey\":\"https://www.google.com?gws_rd=ssl\",\"method\":\"GET\",\"noRetry\":false,\"retryCount\":0,\"errorMessages\":[],\"headers\":{},\"userData\":{\"__crawlee\":{\"state\":4}},\"handledAt\":\"2025-10-22T11:08:05.391Z\"}",
+	"method": "GET",
+	"orderNo": null,
+	"retryCount": 0,
+	"uniqueKey": "https://www.google.com?gws_rd=ssl",
+	"url": "https://www.google.com/?gws_rd=ssl"
+}

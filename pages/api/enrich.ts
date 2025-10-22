@@ -1,6 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import axios from 'axios';
 import * as cheerio from 'cheerio';
+import { smartScrape, scrapeWithPlaywright, scrapeWithBrowser, scrapeWithAxios } from './scraper';
 
 const SOCIAL_PLATFORMS = {
   linkedin: ['linkedin.com/company/', 'linkedin.com/in/', 'linkedin.com/school/', 'linkedin.com'],
@@ -46,6 +47,7 @@ async function fetchPageContent(url: string, retries = 3): Promise<string | null
       // Rotate user agents for better success rate
       userAgent = USER_AGENTS[attempt % USER_AGENTS.length];
       
+      const https = require('https');
       const response = await axios.get(url, {
         timeout: 30000, // 30 second timeout
         headers: {
@@ -63,6 +65,9 @@ async function fetchPageContent(url: string, retries = 3): Promise<string | null
         maxRedirects: 10, // Allow more redirects
         validateStatus: (status) => status < 500, // Accept 4xx errors, retry only on 5xx
         decompress: true, // Auto decompress gzip/deflate
+        httpsAgent: new https.Agent({
+          rejectUnauthorized: false, // Ignore SSL certificate errors
+        }),
       });
       
       // Check if we got valid HTML content
@@ -771,122 +776,226 @@ async function searchEngineFind(domain: string, searchType: string): Promise<str
   }
 }
 
-async function searchSocialProfile(companyName: string, platform: string, website: string): Promise<string | null> {
-  const cleanName = companyName.replace(/\.(com|io|net|org|co|ai|dev|app|tech)$/i, '').trim();
-  const nameVariations = [
-    cleanName.toLowerCase().replace(/\s+/g, ''),
-    cleanName.toLowerCase().replace(/\s+/g, '-'),
-    cleanName.toLowerCase().replace(/\s+/g, '_'),
-    cleanName.toLowerCase().replace(/[^a-z0-9]/g, ''),
-    cleanName.split(' ')[0].toLowerCase(), // First word only
-  ];
-  
-  // Try direct URL construction with multiple variations
-  const patterns: string[] = [];
-  
-  if (platform === 'linkedin') {
-    for (const variation of nameVariations) {
-      patterns.push(
-        `https://www.linkedin.com/company/${variation}`,
-        `https://linkedin.com/company/${variation}`,
-      );
-    }
-  } else if (platform === 'twitter') {
-    for (const variation of nameVariations) {
-      patterns.push(
-        `https://twitter.com/${variation}`,
-        `https://x.com/${variation}`,
-      );
-    }
-  } else if (platform === 'facebook') {
-    for (const variation of nameVariations) {
-      patterns.push(
-        `https://www.facebook.com/${variation}`,
-        `https://facebook.com/${variation}`,
-      );
-    }
-  } else if (platform === 'instagram') {
-    for (const variation of nameVariations) {
-      patterns.push(
-        `https://www.instagram.com/${variation}`,
-        `https://instagram.com/${variation}`,
-      );
-    }
-  } else if (platform === 'youtube') {
-    for (const variation of nameVariations) {
-      patterns.push(
-        `https://www.youtube.com/@${variation}`,
-        `https://www.youtube.com/c/${variation}`,
-        `https://www.youtube.com/channel/${variation}`,
-        `https://www.youtube.com/user/${variation}`,
-      );
-    }
-  } else if (platform === 'tiktok') {
-    for (const variation of nameVariations) {
-      patterns.push(
-        `https://www.tiktok.com/@${variation}`,
-        `https://tiktok.com/@${variation}`,
-      );
-    }
-  } else if (platform === 'github') {
-    for (const variation of nameVariations) {
-      patterns.push(
-        `https://github.com/${variation}`,
-        `https://www.github.com/${variation}`,
-      );
-    }
-  } else if (platform === 'pinterest') {
-    for (const variation of nameVariations) {
-      patterns.push(
-        `https://www.pinterest.com/${variation}`,
-        `https://pinterest.com/${variation}`,
-      );
-    }
-  }
-  
-  // Try each pattern with retry logic
-  for (const pattern of patterns) {
-    try {
-      const response = await axios.head(pattern, { 
-        timeout: 5000,
-        maxRedirects: 3,
-        validateStatus: (status) => status < 400,
-      });
-      if (response.status === 200) {
-        console.log(`Found ${platform} profile: ${pattern}`);
-        return pattern;
-      }
-    } catch (error: any) {
-      // Try GET request if HEAD fails
-      if (error.response?.status === 405) {
-        try {
-          const getResponse = await axios.get(pattern, { 
-            timeout: 5000,
-            maxRedirects: 3,
-            validateStatus: (status) => status < 400,
-          });
-          if (getResponse.status === 200) {
-            console.log(`Found ${platform} profile (via GET): ${pattern}`);
-            return pattern;
-          }
-        } catch {
-          continue;
-        }
-      }
-      continue;
-    }
-  }
-  
-  return null;
-}
-
 function normalizeUrl(url: string): string {
   if (!url) return '';
   url = url.trim();
+  
+  // Only add protocol if missing - let the server handle redirects
   if (!url.startsWith('http://') && !url.startsWith('https://')) {
-    url = 'https://' + url;
+    // Try HTTP first - let server redirect to HTTPS if needed
+    // This way we follow whatever the server wants
+    url = 'http://' + url;
   }
+  
   return url;
+}
+
+// Try URL and follow redirects - let the server decide HTTP vs HTTPS
+// Also handles JavaScript redirects by using headless browser
+async function tryUrl(domain: string): Promise<string | null> {
+  const https = require('https');
+  
+  // Normalize URL (add http:// if no protocol)
+  const url = normalizeUrl(domain);
+  
+  try {
+    // Try HEAD request first (faster)
+    const response = await axios.head(url, {
+      timeout: 10000,
+      maxRedirects: 10, // Follow redirects (HTTP → HTTPS, www, etc.)
+      validateStatus: (status) => status >= 200 && status < 400,
+      httpsAgent: new https.Agent({
+        rejectUnauthorized: false, // Ignore SSL errors
+      }),
+    });
+    
+    if (response.status >= 200 && response.status < 300) {
+      // Get final URL after HTTP redirects
+      // Use responseUrl if available, otherwise use the original URL
+      let finalUrl = response.request?.res?.responseUrl || url;
+      
+      // If we got a path instead of full URL, construct it properly
+      if (finalUrl && !finalUrl.startsWith('http')) {
+        try {
+          const urlObj = new URL(url);
+          // Only append path if it's a valid path (starts with /)
+          if (finalUrl.startsWith('/')) {
+            finalUrl = `${urlObj.protocol}//${urlObj.host}${finalUrl}`;
+          } else {
+            // If it doesn't start with /, it's probably malformed - use original
+            finalUrl = url;
+          }
+        } catch {
+          finalUrl = url;
+        }
+      }
+      
+      console.log(`✅ Found: ${url} → ${finalUrl}`);
+      
+      // Try to detect JavaScript redirects by checking with browser
+      // Only for sites that might have JS redirects (language selection, etc.)
+      if (finalUrl && finalUrl.endsWith('/') && !finalUrl.includes('/en') && !finalUrl.includes('/de')) {
+        try {
+          const browserUrl = await tryUrlWithBrowser(finalUrl);
+          if (browserUrl && browserUrl !== finalUrl) {
+            console.log(`🔄 JS redirect detected: ${finalUrl} → ${browserUrl}`);
+            return browserUrl;
+          }
+        } catch (browserError) {
+          // Browser check failed, use HTTP redirect URL
+        }
+      }
+      
+      return finalUrl;
+    }
+  } catch (headError: any) {
+    // Try GET if HEAD fails (some servers block HEAD)
+    try {
+      const response = await axios.get(url, {
+        timeout: 10000,
+        maxRedirects: 10,
+        validateStatus: (status) => status >= 200 && status < 400,
+        httpsAgent: new https.Agent({
+          rejectUnauthorized: false,
+        }),
+      });
+      
+      if (response.status >= 200 && response.status < 300) {
+        let finalUrl = response.request?.res?.responseUrl || url;
+        
+        if (finalUrl && !finalUrl.startsWith('http')) {
+          try {
+            const urlObj = new URL(url);
+            if (finalUrl.startsWith('/')) {
+              finalUrl = `${urlObj.protocol}//${urlObj.host}${finalUrl}`;
+            } else {
+              finalUrl = url;
+            }
+          } catch {
+            finalUrl = url;
+          }
+        }
+        
+        console.log(`✅ Found (via GET): ${url} → ${finalUrl}`);
+        return finalUrl;
+      }
+    } catch (getError) {
+      console.log(`⚠️ Could not validate ${url}, but will try scraping anyway`);
+    }
+  }
+  
+  // Even if validation failed, return the URL
+  // Let the scraper try - it might still work
+  console.log(`⚠️ Returning unvalidated URL: ${url}`);
+  return url;
+}
+
+// Use browser to detect JavaScript redirects
+async function tryUrlWithBrowser(url: string): Promise<string | null> {
+  try {
+    const { chromium } = require('playwright-core');
+    
+    const browser = await chromium.launch({
+      headless: true,
+      args: ['--no-sandbox', '--disable-setuid-sandbox', '--ignore-certificate-errors'],
+    });
+    
+    const context = await browser.newContext({
+      ignoreHTTPSErrors: true,
+    });
+    
+    const page = await context.newPage();
+    await page.goto(url, { waitUntil: 'networkidle', timeout: 5000 });
+    
+    // Get final URL after JS redirects
+    const finalUrl = page.url();
+    await browser.close();
+    
+    return finalUrl;
+  } catch (error) {
+    return null;
+  }
+}
+
+// Enhanced extraction with headless browser support
+async function enhancedExtraction(website: string, useHeadless: boolean = true): Promise<{
+  socialLinks: Record<string, string>;
+  contactInfo: { email: string; phone: string };
+  contactPage: string;
+  finalUrl?: string; // Return final URL after redirects
+}> {
+  console.log(`🔍 Starting enhanced extraction for: ${website}`);
+  console.log(`   Headless browser: ${useHeadless ? 'ENABLED' : 'DISABLED'}`);
+  
+  try {
+    // Use smart scraper - tries headless browser for JS-heavy sites
+    const scraped = await smartScrape(website, { useHeadless });
+    
+    if (!scraped.success) {
+      return {
+        socialLinks: {},
+        contactInfo: { email: 'Not found', phone: 'Not found' },
+        contactPage: 'Not found',
+      };
+    }
+    
+    // Get final URL if available (from browser redirect detection)
+    const finalUrl = scraped.finalUrl || website;
+    
+    // We got data from homepage, now try contact page
+    const $ = cheerio.load(scraped.html);
+    let contactPageUrl = 'Not found';
+    
+    // Look for contact page link
+    $('a[href]').each((_, element) => {
+      const href = $(element).attr('href');
+      const text = $(element).text().toLowerCase();
+      
+      if (href && (text.includes('contact') || text.includes('kontakt') || 
+                   href.includes('contact') || href.includes('kontakt'))) {
+        try {
+          // If href is already a full URL, use it directly
+          if (href.startsWith('http://') || href.startsWith('https://')) {
+            contactPageUrl = href;
+          } else {
+            // Otherwise, construct relative to website
+            contactPageUrl = new URL(href, finalUrl).toString();
+          }
+          return false; // break
+        } catch (e) {
+          // ignore
+        }
+      }
+    });
+    
+    // If we found a contact page, scrape it too
+    if (contactPageUrl !== 'Not found') {
+      console.log(`📞 Found contact page: ${contactPageUrl}`);
+      const contactScraped = await smartScrape(contactPageUrl, { useHeadless: false }); // Use axios for contact page
+      
+      // Merge social links
+      Object.assign(scraped.socialLinks, contactScraped.socialLinks);
+      
+      // Update contact info if found
+      if (contactScraped.email !== 'Not found') scraped.email = contactScraped.email;
+      if (contactScraped.phone !== 'Not found') scraped.phone = contactScraped.phone;
+    }
+    
+    return {
+      socialLinks: scraped.socialLinks,
+      contactInfo: { email: scraped.email, phone: scraped.phone },
+      contactPage: contactPageUrl,
+      finalUrl, // Return final URL after redirects
+    };
+    
+  } catch (error: any) {
+    console.error(`❌ Enhanced extraction failed:`, error.message);
+    return {
+      socialLinks: {},
+      contactInfo: { email: 'Not found', phone: 'Not found' },
+      contactPage: 'Not found',
+    };
+  }
 }
 
 // Multi-step comprehensive extraction
@@ -1118,33 +1227,10 @@ async function findCompanyWebsite(companyName: string): Promise<string> {
   
   // Try patterns in batches for better performance
   for (const pattern of patterns) {
-    const url = normalizeUrl(pattern);
-    try {
-      const response = await axios.head(url, { 
-        timeout: 10000,
-        maxRedirects: 5,
-        validateStatus: (status) => status >= 200 && status < 400,
-      });
-      if (response.status >= 200 && response.status < 300) {
-        console.log(`Found website: ${url}`);
-        return url;
-      }
-    } catch (error: any) {
-      // Try GET if HEAD fails (some servers block HEAD or have issues)
-      try {
-        const getResponse = await axios.get(url, { 
-          timeout: 10000,
-          maxRedirects: 5,
-          validateStatus: (status) => status >= 200 && status < 400,
-        });
-        if (getResponse.status >= 200 && getResponse.status < 300) {
-          console.log(`Found website (via GET): ${url}`);
-          return url;
-        }
-      } catch {
-        continue;
-      }
-      continue;
+    // Try HTTPS first, fallback to HTTP
+    const foundUrl = await tryUrl(pattern);
+    if (foundUrl) {
+      return foundUrl;
     }
   }
   
@@ -1176,8 +1262,10 @@ export default async function handler(
   const { 
     company, 
     platforms = [],
-    fast_mode = true, // Fast mode is now default for speed
+    fast_mode = false, // Disabled by default - use enhanced extraction with headless browser
     fields_to_extract = [], // Fields user wants to extract
+    search_engine = 'google', // Search engine for finding company website
+    social_search_method = 'website', // Method for finding social profiles
   } = req.body;
 
   if (!company) {
@@ -1274,51 +1362,60 @@ export default async function handler(
       }
     }
     
-    // Pure web scraping - no AI methods
+    // Pure web scraping - no AI methods, no URL guessing
+    // We ONLY return social links that are actually found on the website
     
-    // STEP 1: DIRECT SEARCH - Try direct profile URLs first (FASTEST METHOD)
-    console.log('🚀 STEP 1: Trying direct profile URLs...');
-    const allPlatforms = ['linkedin', 'twitter', 'facebook', 'instagram', 'youtube', 'tiktok', 'pinterest'];
+    // STEP 1: WEBSITE DISCOVERY - Find company website
+    console.log('🌐 STEP 1: Finding company website...');
+    console.log(`   Search Engine: ${search_engine}`);
+    console.log(`   Social Search Method: ${social_search_method}`);
     
-    // Only search for platforms user wants to extract
-    const directSearchPlatforms = fields_to_extract.length > 0 
-      ? allPlatforms.filter(p => fields_to_extract.includes(p))
-      : allPlatforms;
+    // Clean the input - remove paths, trailing slashes, etc.
+    let cleanedInput = company.trim();
     
-    console.log(`Extracting ${directSearchPlatforms.length} platforms: ${directSearchPlatforms.join(', ')}`);
-    let directSearchSuccessCount = 0;
-    
-    for (const platform of directSearchPlatforms) {
-      const foundUrl = await searchSocialProfile(searchName, platform, '');
-      if (foundUrl) {
-        result[platform as keyof EnrichResult] = foundUrl as any;
-        directSearchSuccessCount++;
-        console.log(`✅ STEP 1: Found ${platform} via direct search: ${foundUrl}`);
+    // If input has a path (e.g., "sendgrid.com/en-us"), extract just the domain
+    if (cleanedInput.includes('/') && !cleanedInput.startsWith('http')) {
+      // Remove everything after the first slash
+      cleanedInput = cleanedInput.split('/')[0];
+      console.log(`Cleaned input with path: "${company}" → "${cleanedInput}"`);
+    } else if (cleanedInput.includes('/') && cleanedInput.startsWith('http')) {
+      // It's a full URL, extract hostname
+      try {
+        const urlObj = new URL(cleanedInput);
+        cleanedInput = urlObj.hostname;
+        console.log(`Extracted hostname from URL: "${company}" → "${cleanedInput}"`);
+      } catch {
+        // If parsing fails, try to extract domain manually
+        cleanedInput = cleanedInput.split('/')[2] || cleanedInput.split('/')[0];
       }
     }
     
-    console.log(`✅ STEP 1 Complete: Found ${directSearchSuccessCount}/${directSearchPlatforms.length} profiles via direct search`);
+    // Remove trailing dots or slashes
+    cleanedInput = cleanedInput.replace(/[/.]+$/, '');
     
-    // STEP 2: WEBSITE DISCOVERY - Find company website
-    console.log('🌐 STEP 2: Finding company website...');
-    const isUrl = /\.(com|io|net|org|co|ai|dev|app|tech)\b/i.test(company);
+    // Detect if input is already a URL/domain
+    // Check if it has a dot and looks like a domain (not a path)
+    const isUrl = cleanedInput.includes('.') && 
+                  /^[a-zA-Z0-9-]+(\.[a-zA-Z0-9-]+)+$/.test(cleanedInput) && 
+                  !cleanedInput.includes(' ');
     
-    let website: string;
+    let website: string | null;
     if (isUrl) {
-      website = normalizeUrl(company);
+      // User provided a domain - try it and follow redirects
+      console.log(`Input detected as URL/domain: "${cleanedInput}"`);
+      website = await tryUrl(cleanedInput);
     } else {
-      website = await findCompanyWebsite(company);
+      // Search for company website
+      console.log(`Input detected as company name: "${cleanedInput}"`);
+      website = await findCompanyWebsite(cleanedInput);
     }
 
     if (!website) {
-      // If we found some profiles via direct search, still return success
-      if (directSearchSuccessCount > 0) {
-        console.log('⚠️ Website not found, but returning direct search results');
-        return res.status(200).json(result);
-      }
+      console.log('⚠️ Website not found');
       return res.status(200).json(result);
     }
 
+    // Store the FINAL URL after all redirects
     result.website = website;
     
     // Extract domain from website
@@ -1398,9 +1495,22 @@ export default async function handler(
       return res.status(200).json(result);
     }
 
-    // STEP 3: COMPREHENSIVE EXTRACTION - Crawl website for missing data
-    console.log('🔍 STEP 3: Starting comprehensive website extraction...');
-    const extracted = await comprehensiveExtraction(website);
+    // STEP 3: ENHANCED EXTRACTION - Crawl website with headless browser support
+    console.log('🔍 STEP 3: Starting enhanced website extraction (with headless browser)...');
+    const extracted = await enhancedExtraction(website, true);
+    
+    // Update website URL if it was redirected
+    if (extracted.finalUrl && extracted.finalUrl !== website) {
+      console.log(`🔄 Updating website URL: ${website} → ${extracted.finalUrl}`);
+      result.website = extracted.finalUrl;
+      website = extracted.finalUrl; // Update for future use
+      
+      // Update domain as well
+      try {
+        const urlObj = new URL(extracted.finalUrl);
+        result.company_domain = urlObj.hostname.replace('www.', '');
+      } catch {}
+    }
     
     // Apply extracted data to result (only if not already found in Step 1)
     if (extracted.contactPage !== 'Not found') {
@@ -1430,31 +1540,10 @@ export default async function handler(
     
     console.log('✅ STEP 3 Complete: Website extraction finished');
     
-    // STEP 4: SEARCH ENGINE FALLBACK - Find any remaining missing data
-    console.log('🔍 STEP 4: Using search engine fallback for missing data...');
-    
-    // Try to find contact page if still missing
-    if (result.contact_page === 'Not found') {
-      const contactUrl = await searchEngineFind(website, 'contact');
-      if (contactUrl) {
-        result.contact_page = contactUrl;
-        console.log(`✅ STEP 4: Found contact page via search engine: ${contactUrl}`);
-      }
-    }
-    
-    // Try to find social profiles via search engine
-    const socialPlatforms = ['linkedin', 'facebook', 'twitter', 'instagram', 'youtube'];
-    for (const platform of socialPlatforms) {
-      if (result[platform as keyof EnrichResult] === 'Not found') {
-        const foundUrl = await searchEngineFind(website, platform);
-        if (foundUrl) {
-          result[platform as keyof EnrichResult] = foundUrl as any;
-          console.log(`✅ STEP 4: Found ${platform} via search engine: ${foundUrl}`);
-        }
-      }
-    }
-    
-    console.log('✅ STEP 4 Complete: Search engine fallback finished');
+    // STEP 4: SEARCH ENGINE FALLBACK - DISABLED
+    // Search engines (Google, DuckDuckGo) block bots with CAPTCHA
+    // This method doesn't work reliably and just adds delays
+    console.log('⏭️  STEP 4: Search engine fallback disabled (unreliable)');
 
     // Processing complete
     
