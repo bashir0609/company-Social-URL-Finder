@@ -277,7 +277,7 @@ export async function scrapeSourceCode(url: string): Promise<ScrapedData> {
     
     // Fetch the raw HTML source
     const response = await axios.get(sourceUrl, {
-      timeout: 30000,
+      timeout: 3000, // Reduced to 3s for ultra-fast bulk processing
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
@@ -328,7 +328,7 @@ export async function scrapeWithAxios(url: string): Promise<ScrapedData> {
     
     const https = require('https');
     const response = await axios.get(url, {
-      timeout: 30000,
+      timeout: 3000, // Reduced to 3s for ultra-fast bulk processing
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
@@ -388,18 +388,36 @@ export async function smartScrape(url: string, options: ScraperOptions = {}): Pr
     return axiosResult;
   }
   
-  // Try source code scraping (raw HTML extraction)
-  try {
-    console.log('⚠️ Axios found limited data, trying source code extraction');
-    const sourceResult = await scrapeSourceCode(url);
-    
-    if (sourceResult.success && Object.keys(sourceResult.socialLinks).length > 0) {
-      console.log(`✅ Source code extraction successful for ${url}`);
-      console.log(`   Found ${Object.keys(sourceResult.socialLinks).length} social links`);
-      return sourceResult;
+  // Check if fast mode is enabled (skip slow browser methods)
+  const fastMode = process.env.FAST_MODE === 'true';
+  
+  // In fast mode, skip source code extraction if Axios found nothing (saves 5s per site)
+  if (fastMode && !axiosResult.success) {
+    console.log('⚡ Fast mode enabled - skipping source code and browser scraping');
+    return axiosResult;
+  }
+  
+  // Try source code scraping (raw HTML extraction) only if not in fast mode or Axios had partial success
+  let sourceResult: ScrapedData | null = null;
+  if (!fastMode || axiosResult.success) {
+    try {
+      console.log('⚠️ Axios found limited data, trying source code extraction');
+      sourceResult = await scrapeSourceCode(url);
+      
+      if (sourceResult.success && Object.keys(sourceResult.socialLinks).length > 0) {
+        console.log(`✅ Source code extraction successful for ${url}`);
+        console.log(`   Found ${Object.keys(sourceResult.socialLinks).length} social links`);
+        return sourceResult;
+      }
+    } catch (sourceError: any) {
+      console.log(`❌ Source code extraction failed: ${sourceError.message}`);
     }
-  } catch (sourceError: any) {
-    console.log(`❌ Source code extraction failed: ${sourceError.message}`);
+  }
+  
+  if (fastMode) {
+    console.log('⚡ Fast mode enabled - skipping browser scraping');
+    // Return source code result if we have it, otherwise axios result
+    return sourceResult && sourceResult.success ? sourceResult : axiosResult;
   }
   
   // Check if Crawlee is enabled (can be disabled for low-memory systems)
@@ -425,13 +443,13 @@ export async function smartScrape(url: string, options: ScraperOptions = {}): Pr
     console.log('⚠️ Crawlee disabled (ENABLE_CRAWLEE=false), skipping to Playwright');
   }
   
-  // Fallback to Playwright if Crawlee fails
+  // Fallback to Playwright if Crawlee fails (unless fast mode)
   try {
     console.log('⚠️ Trying Playwright as fallback');
     return await scrapeWithPlaywright(url, options);
   } catch (playwrightError) {
-    console.log('❌ Playwright also failed, returning axios result');
-    return axiosResult;
+    console.log('❌ Playwright also failed, returning best available result');
+    return sourceResult && sourceResult.success ? sourceResult : axiosResult;
   }
 }
 

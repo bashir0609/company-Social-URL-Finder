@@ -397,7 +397,7 @@ export default function Home() {
 
   const processBulkCompanies = async (companies: string[], originalData: any[]) => {
     const results: EnrichResult[] = new Array(companies.length);
-    const BATCH_SIZE = 5; // Process 5 companies in parallel
+    const BATCH_SIZE = 10; // Process 10 companies in parallel (increased for speed)
     let completedCount = 0;
     
     setBulkProgressLog(prev => [...prev, `📊 Starting bulk enrichment for ${companies.length} companies...`]);
@@ -515,7 +515,7 @@ export default function Home() {
       
       // Small delay between batches to avoid overwhelming the server
       if (batchEnd < companies.length) {
-        await new Promise(resolve => setTimeout(resolve, 500));
+        await new Promise(resolve => setTimeout(resolve, 100)); // Reduced from 500ms to 100ms
       }
     }
     
@@ -533,6 +533,54 @@ export default function Home() {
     const date = new Date().toISOString().split('T')[0];
     const originalName = bulkFile ? bulkFile.name.replace(/\.[^/.]+$/, '') : 'export';
     const filename = `${date} ${originalName} social finder.xlsx`;
+    
+    XLSX.writeFile(workbook, filename);
+  };
+
+  const downloadSuccessResults = () => {
+    // Filter results where at least one social link was found
+    const successResults = bulkResults.filter(result => {
+      return result.linkedin !== 'Not found' ||
+             result.facebook !== 'Not found' ||
+             result.twitter !== 'Not found' ||
+             result.instagram !== 'Not found' ||
+             result.youtube !== 'Not found' ||
+             result.tiktok !== 'Not found' ||
+             result.pinterest !== 'Not found' ||
+             result.website;
+    });
+
+    const worksheet = XLSX.utils.json_to_sheet(successResults);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Success');
+    
+    const date = new Date().toISOString().split('T')[0];
+    const originalName = bulkFile ? bulkFile.name.replace(/\.[^/.]+$/, '') : 'export';
+    const filename = `${date} ${originalName} SUCCESS.xlsx`;
+    
+    XLSX.writeFile(workbook, filename);
+  };
+
+  const downloadFailedResults = () => {
+    // Filter results where no social links were found
+    const failedResults = bulkResults.filter(result => {
+      return result.linkedin === 'Not found' &&
+             result.facebook === 'Not found' &&
+             result.twitter === 'Not found' &&
+             result.instagram === 'Not found' &&
+             result.youtube === 'Not found' &&
+             result.tiktok === 'Not found' &&
+             result.pinterest === 'Not found' &&
+             !result.website;
+    });
+
+    const worksheet = XLSX.utils.json_to_sheet(failedResults);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Failed');
+    
+    const date = new Date().toISOString().split('T')[0];
+    const originalName = bulkFile ? bulkFile.name.replace(/\.[^/.]+$/, '') : 'export';
+    const filename = `${date} ${originalName} FAILED.xlsx`;
     
     XLSX.writeFile(workbook, filename);
   };
@@ -1145,13 +1193,33 @@ export default function Home() {
                 return (
                 <div>
                   <div className="flex justify-between items-center mb-4">
-                    <div>
-                      <h3 className="text-lg font-semibold">
-                        Results ({bulkResults.length} companies)
-                      </h3>
-                      <p className="text-sm text-gray-500 mt-1">
-                        Showing {startIndex + 1}-{Math.min(endIndex, bulkResults.length)} of {bulkResults.length}
-                      </p>
+                    <div className="flex items-center gap-4 text-sm">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium">Total:</span>
+                        <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded">{bulkResults.length}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium">✅ Success:</span>
+                        <span className="px-2 py-1 bg-green-100 text-green-700 rounded">
+                          {bulkResults.filter(r => 
+                            r.linkedin !== 'Not found' || r.facebook !== 'Not found' || 
+                            r.twitter !== 'Not found' || r.instagram !== 'Not found' || 
+                            r.youtube !== 'Not found' || r.tiktok !== 'Not found' || 
+                            r.pinterest !== 'Not found' || r.website
+                          ).length}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium">❌ Failed:</span>
+                        <span className="px-2 py-1 bg-red-100 text-red-700 rounded">
+                          {bulkResults.filter(r => 
+                            r.linkedin === 'Not found' && r.facebook === 'Not found' && 
+                            r.twitter === 'Not found' && r.instagram === 'Not found' && 
+                            r.youtube === 'Not found' && r.tiktok === 'Not found' && 
+                            r.pinterest === 'Not found' && !r.website
+                          ).length}
+                        </span>
+                      </div>
                     </div>
                     <div className="flex gap-2">
                       <div className="relative">
@@ -1248,7 +1316,21 @@ export default function Home() {
                         className="px-4 py-2 bg-green-600 text-white rounded-lg font-medium hover:bg-green-700 flex items-center gap-2"
                       >
                         <Download className="w-4 h-4" />
-                        Download Excel
+                        Download All
+                      </button>
+                      <button
+                        onClick={downloadSuccessResults}
+                        className="px-4 py-2 bg-emerald-600 text-white rounded-lg font-medium hover:bg-emerald-700 flex items-center gap-2"
+                      >
+                        <Download className="w-4 h-4" />
+                        Success Only
+                      </button>
+                      <button
+                        onClick={downloadFailedResults}
+                        className="px-4 py-2 bg-red-600 text-white rounded-lg font-medium hover:bg-red-700 flex items-center gap-2"
+                      >
+                        <Download className="w-4 h-4" />
+                        Failed Only
                       </button>
                     </div>
                   </div>
