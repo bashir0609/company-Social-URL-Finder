@@ -1451,7 +1451,7 @@ export default async function handler(
             const href = $(element).attr('href');
             const linkText = $(element).text().toLowerCase().trim();
             
-            if (href && contactKeywords.some(kw => linkText.includes(kw) || href.toLowerCase().includes(kw))) {
+            if (href && website && contactKeywords.some(kw => linkText.includes(kw) || href.toLowerCase().includes(kw))) {
               let contactUrl = href;
               if (href.startsWith('/')) {
                 contactUrl = new URL(href, website).toString();
