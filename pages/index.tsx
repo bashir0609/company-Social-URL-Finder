@@ -525,7 +525,9 @@ export default function Home() {
   };
 
   const downloadResults = () => {
-    const worksheet = XLSX.utils.json_to_sheet(bulkResults);
+    // Define consistent column order for all exports
+    const columnOrder = ['company_name', 'website', 'company_domain', 'contact_page', 'email', 'phone', 'linkedin', 'facebook', 'twitter', 'instagram', 'youtube', 'tiktok', 'pinterest'];
+    const worksheet = XLSX.utils.json_to_sheet(bulkResults, { header: columnOrder });
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, 'Results');
     
@@ -550,7 +552,9 @@ export default function Home() {
              result.website;
     });
 
-    const worksheet = XLSX.utils.json_to_sheet(successResults);
+    // Define consistent column order for all exports
+    const columnOrder = ['company_name', 'website', 'company_domain', 'contact_page', 'email', 'phone', 'linkedin', 'facebook', 'twitter', 'instagram', 'youtube', 'tiktok', 'pinterest'];
+    const worksheet = XLSX.utils.json_to_sheet(successResults, { header: columnOrder });
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, 'Success');
     
@@ -574,7 +578,9 @@ export default function Home() {
              !result.website;
     });
 
-    const worksheet = XLSX.utils.json_to_sheet(failedResults);
+    // Define consistent column order for all exports
+    const columnOrder = ['company_name', 'website', 'company_domain', 'contact_page', 'email', 'phone', 'linkedin', 'facebook', 'twitter', 'instagram', 'youtube', 'tiktok', 'pinterest'];
+    const worksheet = XLSX.utils.json_to_sheet(failedResults, { header: columnOrder });
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, 'Failed');
     
